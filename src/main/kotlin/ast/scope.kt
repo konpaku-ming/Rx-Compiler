@@ -1,5 +1,6 @@
 package ast
 
+/*
 // symbol
 enum class SymbolKind {
     VariableSymbol,
@@ -202,4 +203,4 @@ class ScopeStack {
         }
     }
 }
-
+*/

@@ -1,5 +1,6 @@
 package ast
 
+/*
 sealed interface ResolvedType {
     val name: String
 }
@@ -1389,4 +1390,4 @@ class SemanticVisitor(private val scopeStack: ScopeStack) : ASTVisitor {
             error("condition must be bool")
         }
     }
-}
+}*/

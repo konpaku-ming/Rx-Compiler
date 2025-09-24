@@ -1,5 +1,7 @@
 package ast
 
+import exception.SyntaxException
+
 fun stringToInt(str: String): Int {
     var tempStr = str.replace("_", "")
     var base = 10
@@ -29,7 +31,7 @@ fun stringToChar(str: String): Char {
         else if (tempStr.startsWith("\\0")) '\u0000'
         else if (tempStr.startsWith("\\x"))
             tempStr.substring(2).toInt(16).toChar()
-        else error("invalid char '$str'")
+        else throw SyntaxException("invalid char '$str'")
     }
 }
 
@@ -56,7 +58,7 @@ fun stringToString(str: String): String {
                     i += 2
                 }
 
-                else -> error("invalid escape")
+                else -> throw SyntaxException("invalid escape")
             }
             i++
         }
@@ -116,22 +118,26 @@ class Parser(private val tokens: List<Token>) {
     private val tokenNum = tokens.size
 
     private fun peek(): Token {
-        if (position >= tokenNum) error("expect token but found none")
+        if (position >= tokenNum)
+            throw SyntaxException("expect token but found none")
         else return tokens[position]
     }
 
     private fun consume(): Token {
-        if (position >= tokenNum) error("expect token but found none")
+        if (position >= tokenNum)
+            throw SyntaxException("expect token but found none")
         else return tokens[position++]
     }
 
     private fun ahead(offset: Int): Token {
-        if (position + offset >= tokenNum) error("expect token but found none")
+        if (position + offset >= tokenNum)
+            throw SyntaxException("expect token but found none")
         else return tokens[position + offset]
     }
 
     private fun match(type: TokenType, value: String? = null): Boolean {
-        if (position >= tokenNum) error("expect token but found none")
+        if (position >= tokenNum)
+            throw SyntaxException("expect token but found none")
         val cur = tokens[position]
         if (type == cur.type && (value == null || value == cur.value)) {
             position++
@@ -141,7 +147,7 @@ class Parser(private val tokens: List<Token>) {
 
     fun parse(): CrateNode {
         val items = mutableListOf<ItemNode>()
-        while (position >= tokenNum || peek().type == TokenType.EOF) {
+        while (!(position >= tokenNum || peek().type == TokenType.EOF)) {
             items.add(parseItem())
         }
         return CrateNode(items)
@@ -250,7 +256,7 @@ class Parser(private val tokens: List<Token>) {
             TokenType.RETURN -> parseReturnExpr(consume())
             TokenType.Underscore -> parseUnderscoreExpr(consume())
 
-            else -> error("unexpected prefix token")
+            else -> throw SyntaxException("unexpected prefix token")
         }
     }
 
@@ -302,7 +308,7 @@ class Parser(private val tokens: List<Token>) {
                 }
             }
 
-            else -> error("unexpected infix token")
+            else -> throw SyntaxException("unexpected infix token")
         }
     }
 
@@ -321,7 +327,7 @@ class Parser(private val tokens: List<Token>) {
         if (peek().type != TokenType.IDENTIFIER &&
             peek().type != TokenType.SELF &&
             peek().type != TokenType.SELF_CAP
-        ) error("unexpected token in PathExprSegment")
+        ) throw SyntaxException("unexpected token in PathExprSegment")
         val identSegment = consume()
         return PathSegment(identSegment)
     }
@@ -342,29 +348,34 @@ class Parser(private val tokens: List<Token>) {
             TokenType.BitAnd -> parseReferenceType(cur)
             TokenType.LeftBracket -> parseArrayType(cur)
             TokenType.LeftParen -> parseUnitType(cur)
-            else -> error("unexpected token in TypeNoBounds")
+            else -> throw SyntaxException("unexpected token in TypeNoBounds")
         }
     }
 
     fun parseReferenceType(cur: Token): ReferenceTypeNode {
-        if (cur.type != TokenType.BitAnd) error("expected &")
+        if (cur.type != TokenType.BitAnd) throw SyntaxException("expected &")
         val isMut = match(TokenType.MUT)
         val tar = parseType()
         return ReferenceTypeNode(isMut, tar)
     }
 
     fun parseArrayType(cur: Token): TypeNode {
-        if (cur.type != TokenType.LeftBracket) error("expected [")
+        if (cur.type != TokenType.LeftBracket)
+            throw SyntaxException("expected [")
         val elementType = parseType()
-        if (!match(TokenType.Semicolon)) error("expected ;")
+        if (!match(TokenType.Semicolon))
+            throw SyntaxException("expected ;")
         val length = parseExpr(0)
-        if (!match(TokenType.RightBracket)) error("expected ]")
+        if (!match(TokenType.RightBracket))
+            throw SyntaxException("expected ]")
         return ArrayTypeNode(elementType, length)
     }
 
     fun parseUnitType(cur: Token): TypeNode {
-        if (cur.type != TokenType.LeftParen) error("expected (")
-        if (!match(TokenType.RightParen)) error("expected )")
+        if (cur.type != TokenType.LeftParen)
+            throw SyntaxException("expected (")
+        if (!match(TokenType.RightParen))
+            throw SyntaxException("expected )")
         return UnitTypeNode()
     }
 
@@ -394,12 +405,13 @@ class Parser(private val tokens: List<Token>) {
             TokenType.RAW_C_STRING_LITERAL ->
                 return RawCStringLiteralExprNode(cur.value)
 
-            else -> error("unexpected token")
+            else -> throw SyntaxException("unexpected token")
         }
     }
 
     fun parseBlockExpr(cur: Token): BlockExprNode {
-        if (cur.type != TokenType.LeftBrace) error("expected {")
+        if (cur.type != TokenType.LeftBrace)
+            throw SyntaxException("expected {")
         val items = mutableListOf<ItemNode>()
         val statements = mutableListOf<StmtNode>()
         var tailExpr: ExprNode? = null
@@ -414,13 +426,12 @@ class Parser(private val tokens: List<Token>) {
                 val expr = parseExpr(0)
                 if (match(TokenType.Semicolon)) {
                     statements.add(ExprStmtNode(expr))
+                } else if (peek().type != TokenType.LeftBrace) {
+                    if (expr is ExprWithoutBlockNode)
+                        throw SyntaxException("ExprStmt must have block")
+                    statements.add(ExprStmtNode(expr))
                 } else {
-                    if (peek().type != TokenType.LeftBrace) {
-                        if (expr is ExprWithoutBlockNode) error("ExprWithoutBlock cannot be a stmt")
-                        statements.add(ExprStmtNode(expr))
-                    } else {
-                        tailExpr = expr
-                    }
+                    tailExpr = expr
                 }
             }
         }
@@ -429,154 +440,175 @@ class Parser(private val tokens: List<Token>) {
 
     fun parsePrefixNegate(cur: Token): NegationExprNode {
         // - as prefix
-        if (cur.type != TokenType.SubNegate) error("expected -")
+        if (cur.type != TokenType.SubNegate)
+            throw SyntaxException("expected -")
         val right = parseExpr(12)
         return NegationExprNode(cur, right)
     }
 
     fun parsePrefixNot(cur: Token): NegationExprNode {
         // ! as prefix
-        if (cur.type != TokenType.Not) error("expected !")
+        if (cur.type != TokenType.Not)
+            throw SyntaxException("expected !")
         val right = parseExpr(12)
         return NegationExprNode(cur, right)
     }
 
     fun parseInfixAdd(left: ExprNode, cur: Token): BinaryExprNode {
         // + as infix
-        if (cur.type != TokenType.Add) error("expected +")
+        if (cur.type != TokenType.Add)
+            throw SyntaxException("expected +")
         val right = parseExpr(9)
         return BinaryExprNode(left, cur, right)
     }
 
     fun parseInfixSub(left: ExprNode, cur: Token): BinaryExprNode {
         // - as infix
-        if (cur.type != TokenType.SubNegate) error("expected -")
+        if (cur.type != TokenType.SubNegate)
+            throw SyntaxException("expected -")
         val right = parseExpr(9)
         return BinaryExprNode(left, cur, right)
     }
 
     fun parseInfixMul(left: ExprNode, cur: Token): BinaryExprNode {
         // * as infix
-        if (cur.type != TokenType.Mul) error("expected *")
+        if (cur.type != TokenType.Mul)
+            throw SyntaxException("expected *")
         val right = parseExpr(10)
         return BinaryExprNode(left, cur, right)
     }
 
     fun parseInfixDiv(left: ExprNode, cur: Token): BinaryExprNode {
         // / as infix
-        if (cur.type != TokenType.Div) error("expected /")
+        if (cur.type != TokenType.Div)
+            throw SyntaxException("expected /")
         val right = parseExpr(10)
         return BinaryExprNode(left, cur, right)
     }
 
     fun parseInfixMod(left: ExprNode, cur: Token): BinaryExprNode {
         // % as infix
-        if (cur.type != TokenType.Mod) error("expected %")
+        if (cur.type != TokenType.Mod)
+            throw SyntaxException("expected %")
         val right = parseExpr(10)
         return BinaryExprNode(left, cur, right)
     }
 
     fun parseInfixShl(left: ExprNode, cur: Token): BinaryExprNode {
         // << as infix
-        if (cur.type != TokenType.Shl) error("expected <<")
+        if (cur.type != TokenType.Shl)
+            throw SyntaxException("expected <<")
         val right = parseExpr(8)
         return BinaryExprNode(left, cur, right)
     }
 
     fun parseInfixShr(left: ExprNode, cur: Token): BinaryExprNode {
         // >> as infix
-        if (cur.type != TokenType.Shr) error("expected >>")
+        if (cur.type != TokenType.Shr)
+            throw SyntaxException("expected >>")
         val right = parseExpr(8)
         return BinaryExprNode(left, cur, right)
     }
 
     fun parseInfixBitAnd(left: ExprNode, cur: Token): BinaryExprNode {
         // & as infix
-        if (cur.type != TokenType.BitAnd) error("expected &")
+        if (cur.type != TokenType.BitAnd)
+            throw SyntaxException("expected &")
         val right = parseExpr(7)
         return BinaryExprNode(left, cur, right)
     }
 
     fun parseInfixBitOr(left: ExprNode, cur: Token): BinaryExprNode {
         // | as infix
-        if (cur.type != TokenType.BitOr) error("expected |")
+        if (cur.type != TokenType.BitOr)
+            throw SyntaxException("expected |")
         val right = parseExpr(5)
         return BinaryExprNode(left, cur, right)
     }
 
     fun parseInfixBitXor(left: ExprNode, cur: Token): BinaryExprNode {
         // ^ as infix
-        if (cur.type != TokenType.BitXor) error("expected ^")
+        if (cur.type != TokenType.BitXor)
+            throw SyntaxException("expected ^")
         val right = parseExpr(6)
         return BinaryExprNode(left, cur, right)
     }
 
     fun parseInfixLt(left: ExprNode, cur: Token): ComparisonExprNode {
         // < as infix
-        if (cur.type != TokenType.Lt) error("expected <")
+        if (cur.type != TokenType.Lt)
+            throw SyntaxException("expected <")
         val right = parseExpr(4)
         return ComparisonExprNode(left, cur, right)
     }
 
     fun parseInfixGt(left: ExprNode, cur: Token): ComparisonExprNode {
         // > as infix
-        if (cur.type != TokenType.Gt) error("expected >")
+        if (cur.type != TokenType.Gt) throw SyntaxException("expected >")
         val right = parseExpr(4)
         return ComparisonExprNode(left, cur, right)
     }
 
     fun parseInfixLe(left: ExprNode, cur: Token): ComparisonExprNode {
         // <= as infix
-        if (cur.type != TokenType.Le) error("expected <=")
+        if (cur.type != TokenType.Le)
+            throw SyntaxException("expected <=")
         val right = parseExpr(4)
         return ComparisonExprNode(left, cur, right)
     }
 
     fun parseInfixGe(left: ExprNode, cur: Token): ComparisonExprNode {
         // >= as infix
-        if (cur.type != TokenType.Ge) error("expected >=")
+        if (cur.type != TokenType.Ge)
+            throw SyntaxException("expected >=")
         val right = parseExpr(4)
         return ComparisonExprNode(left, cur, right)
     }
 
     fun parseInfixEq(left: ExprNode, cur: Token): ComparisonExprNode {
         // == as infix
-        if (cur.type != TokenType.Eq) error("expected ==")
+        if (cur.type != TokenType.Eq)
+            throw SyntaxException("expected ==")
         val right = parseExpr(4)
         return ComparisonExprNode(left, cur, right)
     }
 
     fun parseInfixNeq(left: ExprNode, cur: Token): ComparisonExprNode {
         // != as infix
-        if (cur.type != TokenType.Neq) error("expected !=")
+        if (cur.type != TokenType.Neq)
+            throw SyntaxException("expected !=")
         val right = parseExpr(4)
         return ComparisonExprNode(left, cur, right)
     }
 
     fun parseInfixAnd(left: ExprNode, cur: Token): LazyBooleanExprNode {
         // && as infix
-        if (cur.type != TokenType.And) error("expected &&")
+        if (cur.type != TokenType.And)
+            throw SyntaxException("expected &&")
         val right = parseExpr(3)
         return LazyBooleanExprNode(left, cur, right)
     }
 
     fun parseInfixOr(left: ExprNode, cur: Token): LazyBooleanExprNode {
         // || as infix
-        if (cur.type != TokenType.Or) error("expected ||")
+        if (cur.type != TokenType.Or)
+            throw SyntaxException("expected ||")
         val right = parseExpr(2)
         return LazyBooleanExprNode(left, cur, right)
     }
 
     fun parseInfixAs(left: ExprNode, cur: Token): TypeCastExprNode {
         // TypeCast
-        if (cur.type != TokenType.AS) error("expected as")
+        if (cur.type != TokenType.AS)
+            throw SyntaxException("expected as")
         val targetType = parseType()
         return TypeCastExprNode(left, targetType)
     }
 
     fun parsePrefixBorrow(cur: Token): BorrowExprNode {
         // & as prefix
-        if (cur.type != TokenType.BitAnd) error("expected &")
+        if (cur.type != TokenType.BitAnd)
+            throw SyntaxException("expected &")
         val isMut = match(TokenType.MUT)
         val expr = parseExpr(12)
         return BorrowExprNode(isMut, expr)
@@ -584,7 +616,8 @@ class Parser(private val tokens: List<Token>) {
 
     fun parsePrefixAnd(cur: Token): BorrowExprNode {
         // && as prefix
-        if (cur.type != TokenType.And) error("expected &&")
+        if (cur.type != TokenType.And)
+            throw SyntaxException("expected &&")
         val isMut = match(TokenType.MUT)
         val expr = parseExpr(12)
         return BorrowExprNode(isMut, BorrowExprNode(isMut, expr))
@@ -592,97 +625,112 @@ class Parser(private val tokens: List<Token>) {
 
     fun parsePrefixDeref(cur: Token): DerefExprNode {
         // * as prefix
-        if (cur.type != TokenType.Mul) error("expected *")
+        if (cur.type != TokenType.Mul)
+            throw SyntaxException("expected *")
         val expr = parseExpr(12)
         return DerefExprNode(expr)
     }
 
     fun parseInfixAssign(left: ExprNode, cur: Token): AssignExprNode {
         // = as prefix
-        if (cur.type != TokenType.Assign) error("expected =")
+        if (cur.type != TokenType.Assign)
+            throw SyntaxException("expected =")
         val right = parseExpr(1)
         return AssignExprNode(left, right)
     }
 
     fun parseInfixAddAssign(left: ExprNode, cur: Token): CompoundAssignExprNode {
         // += as infix
-        if (cur.type != TokenType.AddAssign) error("expected +=")
+        if (cur.type != TokenType.AddAssign)
+            throw SyntaxException("expected +=")
         val right = parseExpr(1)
         return CompoundAssignExprNode(left, cur, right)
     }
 
     fun parseInfixSubAssign(left: ExprNode, cur: Token): CompoundAssignExprNode {
         // -= as infix
-        if (cur.type != TokenType.SubAssign) error("expected -=")
+        if (cur.type != TokenType.SubAssign)
+            throw SyntaxException("expected -=")
         val right = parseExpr(1)
         return CompoundAssignExprNode(left, cur, right)
     }
 
     fun parseInfixMulAssign(left: ExprNode, cur: Token): CompoundAssignExprNode {
         // *= as infix
-        if (cur.type != TokenType.MulAssign) error("expected *=")
+        if (cur.type != TokenType.MulAssign)
+            throw SyntaxException("expected *=")
         val right = parseExpr(1)
         return CompoundAssignExprNode(left, cur, right)
     }
 
     fun parseInfixDivAssign(left: ExprNode, cur: Token): CompoundAssignExprNode {
         // /= as infix
-        if (cur.type != TokenType.DivAssign) error("expected /=")
+        if (cur.type != TokenType.DivAssign)
+            throw SyntaxException("expected /=")
         val right = parseExpr(1)
         return CompoundAssignExprNode(left, cur, right)
     }
 
     fun parseInfixModAssign(left: ExprNode, cur: Token): CompoundAssignExprNode {
         // %= as infix
-        if (cur.type != TokenType.ModAssign) error("expected %=")
+        if (cur.type != TokenType.ModAssign)
+            throw SyntaxException("expected %=")
         val right = parseExpr(1)
         return CompoundAssignExprNode(left, cur, right)
     }
 
     fun parseInfixShlAssign(left: ExprNode, cur: Token): CompoundAssignExprNode {
         // <<= as infix
-        if (cur.type != TokenType.ShlAssign) error("expected <<=")
+        if (cur.type != TokenType.ShlAssign)
+            throw SyntaxException("expected <<=")
         val right = parseExpr(1)
         return CompoundAssignExprNode(left, cur, right)
     }
 
     fun parseInfixShrAssign(left: ExprNode, cur: Token): CompoundAssignExprNode {
         // >>= as infix
-        if (cur.type != TokenType.ShrAssign) error("expected >>=")
+        if (cur.type != TokenType.ShrAssign)
+            throw SyntaxException("expected >>=")
         val right = parseExpr(1)
         return CompoundAssignExprNode(left, cur, right)
     }
 
     fun parseInfixAndAssign(left: ExprNode, cur: Token): CompoundAssignExprNode {
         // &= as infix
-        if (cur.type != TokenType.AndAssign) error("expected &=")
+        if (cur.type != TokenType.AndAssign)
+            throw SyntaxException("expected &=")
         val right = parseExpr(1)
         return CompoundAssignExprNode(left, cur, right)
     }
 
     fun parseInfixOrAssign(left: ExprNode, cur: Token): CompoundAssignExprNode {
         // |= as infix
-        if (cur.type != TokenType.OrAssign) error("expected |=")
+        if (cur.type != TokenType.OrAssign)
+            throw SyntaxException("expected |=")
         val right = parseExpr(1)
         return CompoundAssignExprNode(left, cur, right)
     }
 
     fun parseInfixXorAssign(left: ExprNode, cur: Token): CompoundAssignExprNode {
         // ^= as infix
-        if (cur.type != TokenType.XorAssign) error("expected ^=")
+        if (cur.type != TokenType.XorAssign)
+            throw SyntaxException("expected ^=")
         val right = parseExpr(1)
         return CompoundAssignExprNode(left, cur, right)
     }
 
     fun parseGroupedExpr(cur: Token): GroupedExprNode {
-        if (cur.type != TokenType.LeftParen) error("expected (")
+        if (cur.type != TokenType.LeftParen)
+            throw SyntaxException("expected (")
         val expr = parseExpr(0)
-        if (!match(TokenType.RightParen)) error("expected )")
+        if (!match(TokenType.RightParen))
+            throw SyntaxException("expected )")
         return GroupedExprNode(expr)
     }
 
     fun parseArrayExpr(cur: Token): ArrayExprNode {
-        if (cur.type != TokenType.LeftBracket) error("expected [")
+        if (cur.type != TokenType.LeftBracket)
+            throw SyntaxException("expected [")
         val element = mutableListOf<ExprNode>()
         if (match(TokenType.RightBracket)) {
             // []
@@ -695,64 +743,77 @@ class Parser(private val tokens: List<Token>) {
             return ArrayListExprNode(element)
         }
         if (match(TokenType.Comma)) {
-            if (match(TokenType.RightBracket)) return ArrayListExprNode(element)
+            if (match(TokenType.RightBracket))
+                return ArrayListExprNode(element)
             else element.add(parseExpr(0))
             while (match(TokenType.Comma)) {
                 if (peek().type == TokenType.RightBracket) {
                     break
                 } else element.add(parseExpr(0))
             }
-            if (!match(TokenType.RightBracket)) error("expected ]")
+            if (!match(TokenType.RightBracket))
+                throw SyntaxException("expected ]")
             return ArrayListExprNode(element)
         }
         if (match(TokenType.Semicolon)) {
             val length = parseExpr(0)
-            if (!match(TokenType.RightBracket)) error("expected ]")
+            if (!match(TokenType.RightBracket))
+                throw SyntaxException("expected ]")
             return ArrayLengthExprNode(first, length)
         }
-        error("unexpected token in ArrayExpr")
+        throw SyntaxException("unexpected token in ArrayExpr")
     }
 
     fun parseIndexExpr(base: ExprNode, cur: Token): IndexExprNode {
-        if (cur.type != TokenType.LeftBracket) error("expected [")
+        if (cur.type != TokenType.LeftBracket)
+            throw SyntaxException("expected [")
         val index = parseExpr(0)
-        if (!match(TokenType.RightBracket)) error("expected ]")
+        if (!match(TokenType.RightBracket))
+            throw SyntaxException("expected ]")
         return IndexExprNode(base, index)
     }
 
     fun parseStructExpr(path: PathExprNode): StructExprNode {
-        if (!match(TokenType.LeftBrace)) error("expected {")
+        if (!match(TokenType.LeftBrace))
+            throw SyntaxException("expected {")
         val fields = mutableListOf<StructExprField>()
-        if (match(TokenType.RightBrace)) return StructExprNode(path, emptyList())
+        if (match(TokenType.RightBrace))
+            return StructExprNode(path, emptyList())
         else fields.add(parseStructExprField())
         while (match(TokenType.Comma)) {
             if (peek().type == TokenType.RightBrace) {
                 break
             } else fields.add(parseStructExprField())
         }
-        if (!match(TokenType.RightBrace)) error("expected }")
+        if (!match(TokenType.RightBrace))
+            throw SyntaxException("expected }")
         return StructExprNode(path, fields)
     }
 
     fun parseStructExprField(): StructExprField {
-        if (peek().type != TokenType.IDENTIFIER) error("expected identifier")
+        if (peek().type != TokenType.IDENTIFIER)
+            throw SyntaxException("expected identifier")
         val name = consume()
-        if (!match(TokenType.Colon)) error("expected colon")
+        if (!match(TokenType.Colon))
+            throw SyntaxException("expected colon")
         val expr = parseExpr(0)
         return StructExprField(name, expr)
     }
 
     fun parseCallExpr(expr: ExprNode, cur: Token): CallExprNode {
-        if (cur.type != TokenType.LeftParen) error("expected (")
+        if (cur.type != TokenType.LeftParen)
+            throw SyntaxException("expected (")
         val params = mutableListOf<ExprNode>()
-        if (match(TokenType.RightParen)) return CallExprNode(expr, emptyList())
+        if (match(TokenType.RightParen))
+            return CallExprNode(expr, emptyList())
         else params.add(parseExpr(0))
         while (match(TokenType.Comma)) {
             if (peek().type == TokenType.RightParen) {
                 break
             } else params.add(parseExpr(0))
         }
-        if (!match(TokenType.RightParen)) error("expected )")
+        if (!match(TokenType.RightParen))
+            throw SyntaxException("expected )")
         return CallExprNode(expr, params)
     }
 
@@ -760,7 +821,8 @@ class Parser(private val tokens: List<Token>) {
         expr: ExprNode,
         method: PathSegment
     ): MethodCallExprNode {
-        if (!match(TokenType.LeftParen)) error("expected (")
+        if (!match(TokenType.LeftParen))
+            throw SyntaxException("expected (")
         val params = mutableListOf<ExprNode>()
         if (match(TokenType.RightParen)) {
             return MethodCallExprNode(expr, method, emptyList())
@@ -771,13 +833,15 @@ class Parser(private val tokens: List<Token>) {
                     break
                 } else params.add(parseExpr(0))
             }
-            if (!match(TokenType.RightParen)) error("expected )")
+            if (!match(TokenType.RightParen))
+                throw SyntaxException("expected )")
             return MethodCallExprNode(expr, method, params)
         }
     }
 
     fun parseFieldExpr(expr: ExprNode, id: Token): FieldExprNode {
-        if (id.type != TokenType.IDENTIFIER) error("expected id")
+        if (id.type != TokenType.IDENTIFIER)
+            throw SyntaxException("expected id")
         return FieldExprNode(expr, id)
     }
 
@@ -790,26 +854,29 @@ class Parser(private val tokens: List<Token>) {
             TokenType.MUT -> parseIdentifierPattern()
             TokenType.IDENTIFIER -> parseIdentifierPattern()
 
-            else -> error("unexpected token in pattern")
+            else -> throw SyntaxException("unexpected token in pattern")
         }
     }
 
     fun parseIdentifierPattern(): IdentifierPatternNode {
         val isRef = match(TokenType.REF)
         val isMut = match(TokenType.MUT)
-        if (peek().type != TokenType.IDENTIFIER) error("expected identifier")
+        if (peek().type != TokenType.IDENTIFIER)
+            throw SyntaxException("expected identifier")
         val name = consume()
         return IdentifierPatternNode(name, isRef, isMut)
     }
 
     fun parseWildcardPattern(): WildcardPatternNode {
-        if (!match(TokenType.Underscore)) error("expected _")
+        if (!match(TokenType.Underscore))
+            throw SyntaxException("expected _")
         return WildcardPatternNode()
     }
 
     fun parseReferencePattern(): ReferencePatternNode {
         val ref = consume()
-        if (ref.type != TokenType.And && ref.type != TokenType.BitAnd) error("expected & or &&")
+        if (ref.type != TokenType.And && ref.type != TokenType.BitAnd)
+            throw SyntaxException("expected & or &&")
         val isMut = match(TokenType.MUT)
         val pattern = parsePattern()
         return if (ref.type == TokenType.BitAnd) {
@@ -820,17 +887,20 @@ class Parser(private val tokens: List<Token>) {
     }
 
     fun parseCondition(): Condition {
-        if (!match(TokenType.LeftParen)) error("expected (")
+        if (!match(TokenType.LeftParen))
+            throw SyntaxException("expected (")
         val expr = parseExpr(0)
         if (expr is StructExprNode) {
-            error("Excluded expression type in condition")
+            throw SyntaxException("Excluded expression type in condition")
         }
-        if (!match(TokenType.RightParen)) error("expected )")
+        if (!match(TokenType.RightParen))
+            throw SyntaxException("expected )")
         return Condition(expr)
     }
 
     fun parseIfExpr(cur: Token): IfExprNode {
-        if (cur.type != TokenType.IF) error("expected if")
+        if (cur.type != TokenType.IF)
+            throw SyntaxException("expected if")
         val condition = parseCondition()
         val thenBranch = parseBlockExpr(consume())
         var elseBranch: ExprNode? = null
@@ -845,27 +915,30 @@ class Parser(private val tokens: List<Token>) {
                     parseBlockExpr(token)
                 }
 
-                else -> error("expected if or {")
+                else -> throw SyntaxException("expected if or {")
             }
         }
         return IfExprNode(condition, thenBranch, elseBranch)
     }
 
     fun parseInfiniteLoopExpr(cur: Token): InfiniteLoopExprNode {
-        if (cur.type != TokenType.LOOP) error("expected loop")
+        if (cur.type != TokenType.LOOP)
+            throw SyntaxException("expected loop")
         val block = parseBlockExpr(consume())
         return InfiniteLoopExprNode(block)
     }
 
     fun parsePredicateLoopExpr(cur: Token): PredicateLoopExprNode {
-        if (cur.type != TokenType.WHILE) error("expected while")
+        if (cur.type != TokenType.WHILE)
+            throw SyntaxException("expected while")
         val condition = parseCondition()
         val block = parseBlockExpr(consume())
         return PredicateLoopExprNode(condition, block)
     }
 
     fun parseBreakExpr(cur: Token): BreakExprNode {
-        if (cur.type != TokenType.BREAK) error("expected break")
+        if (cur.type != TokenType.BREAK)
+            throw SyntaxException("expected break")
         if (isExpr()) {
             val value = parseExpr(0)
             return BreakExprNode(value)
@@ -873,12 +946,14 @@ class Parser(private val tokens: List<Token>) {
     }
 
     fun parseContinueExpr(cur: Token): ContinueExprNode {
-        if (cur.type != TokenType.CONTINUE) error("expected continue")
+        if (cur.type != TokenType.CONTINUE)
+            throw SyntaxException("expected continue")
         return ContinueExprNode()
     }
 
     fun parseReturnExpr(cur: Token): ReturnExprNode {
-        if (cur.type != TokenType.RETURN) error("expected return")
+        if (cur.type != TokenType.RETURN)
+            throw SyntaxException("expected return")
         if (isExpr()) {
             val value = parseExpr(0)
             return ReturnExprNode(value)
@@ -886,7 +961,8 @@ class Parser(private val tokens: List<Token>) {
     }
 
     fun parseUnderscoreExpr(cur: Token): UnderscoreExprNode {
-        if (cur.type != TokenType.Underscore) error("expected _")
+        if (cur.type != TokenType.Underscore)
+            throw SyntaxException("expected _")
         return UnderscoreExprNode()
     }
 
@@ -894,23 +970,28 @@ class Parser(private val tokens: List<Token>) {
         return when (peek().type) {
             TokenType.Semicolon -> parseEmptyStmt(consume())
             TokenType.LET -> parseLetStmt(consume())
-            else -> error("unexpected token in Stmt")
+            else -> throw SyntaxException("unexpected token in Stmt")
         }
     }
 
     fun parseEmptyStmt(cur: Token): EmptyStmtNode {
-        if (cur.type != TokenType.Semicolon) error("expected ;")
+        if (cur.type != TokenType.Semicolon)
+            throw SyntaxException("expected ;")
         return EmptyStmtNode(cur)
     }
 
     fun parseLetStmt(cur: Token): LetStmtNode {
-        if (cur.type != TokenType.LET) error("expected let")
+        if (cur.type != TokenType.LET)
+            throw SyntaxException("expected let")
         val pattern = parsePattern()
-        if (!match(TokenType.Colon)) error("expected :")
+        if (!match(TokenType.Colon))
+            throw SyntaxException("expected :")
         val valueType = parseType()
-        if (!match(TokenType.Assign)) error("expected =")
+        if (!match(TokenType.Assign))
+            throw SyntaxException("expected =")
         val value = parseExpr(0)
-        if (!match(TokenType.Semicolon)) error("expected ;")
+        if (!match(TokenType.Semicolon))
+            throw SyntaxException("expected ;")
         return LetStmtNode(pattern, valueType, value)
     }
 
@@ -924,24 +1005,28 @@ class Parser(private val tokens: List<Token>) {
                 when (ahead(1).type) {
                     TokenType.FN -> parseFunctionItem()
                     TokenType.IDENTIFIER -> parseConstantItem()
-                    else -> error("unexpected token in item")
+                    else -> throw SyntaxException("unexpected token in item")
                 }
             }
 
             TokenType.TRAIT -> parseTraitItem()
             TokenType.IMPL -> parseImplItem()
-            else -> error("unexpected token in item")
+            else -> throw SyntaxException("unexpected token in item")
         }
     }
 
     fun parseFunctionItem(): FunctionItemNode {
         val isConst = match(TokenType.CONST)
-        if (!match(TokenType.FN)) error("expected fn")
-        if (peek().type != TokenType.IDENTIFIER) error("expected id")
+        if (!match(TokenType.FN))
+            throw SyntaxException("expected fn")
+        if (peek().type != TokenType.IDENTIFIER)
+            throw SyntaxException("expected id")
         val fnName = consume()
-        if (!match(TokenType.LeftParen)) error("expected (")
+        if (!match(TokenType.LeftParen))
+            throw SyntaxException("expected (")
         val (selfParam, params) = parseFunctionParameters()
-        if (!match(TokenType.RightParen)) error("expected )")
+        if (!match(TokenType.RightParen))
+            throw SyntaxException("expected )")
         val returnType = if (match(TokenType.Arrow)) {
             parseType()
         } else null
@@ -953,7 +1038,8 @@ class Parser(private val tokens: List<Token>) {
                 params, returnType, body
             )
         } else {
-            if (!match(TokenType.Semicolon)) error("expected ;")
+            if (!match(TokenType.Semicolon))
+                throw SyntaxException("expected ;")
             return FunctionItemNode(
                 isConst, fnName, selfParam,
                 params, returnType, null
@@ -963,7 +1049,7 @@ class Parser(private val tokens: List<Token>) {
 
     fun parseFunctionParameters(): Pair<SelfParam?, List<FunctionParam>> {
         val params = mutableListOf<FunctionParam>()
-        if (match(TokenType.RightParen)) return null to emptyList()
+        if (peek().type == TokenType.RightParen) return null to emptyList()
         if (peek().type == TokenType.SELF ||
             (peek().type == TokenType.BitAnd &&
                     ahead(1).type == TokenType.SELF) ||
@@ -988,7 +1074,7 @@ class Parser(private val tokens: List<Token>) {
             } else {
                 if (peek().type == TokenType.RightParen) {
                     return selfParam to emptyList()
-                } else error("expected , or )")
+                } else throw SyntaxException("expected , or )")
             }
         } else {
             params.add(parseFunctionParam())
@@ -1003,10 +1089,11 @@ class Parser(private val tokens: List<Token>) {
     fun parseSelfParam(): SelfParam {
         val isRef = match(TokenType.BitAnd)
         val isMut = match(TokenType.MUT)
-        if (!match(TokenType.SELF)) error("expected self")
+        if (!match(TokenType.SELF))
+            throw SyntaxException("expected self")
         var selfType: TypeNode? = null
         if (match(TokenType.Colon)) {
-            if (isRef) error("unexpected :")
+            if (isRef) throw SyntaxException("unexpected :")
             selfType = parseType()
         }
         return SelfParam(isMut, isRef, selfType)
@@ -1014,21 +1101,26 @@ class Parser(private val tokens: List<Token>) {
 
     fun parseFunctionParam(): FunctionParam {
         val paramPattern = parsePattern()
-        if (!match(TokenType.Colon)) error("expected :")
+        if (!match(TokenType.Colon))
+            throw SyntaxException("expected :")
         val type = parseType()
         return FunctionParam(paramPattern, type)
     }
 
     fun parseStructItem(): StructItemNode {
-        if (!match(TokenType.STRUCT)) error("expected struct")
-        if (peek().type != TokenType.IDENTIFIER) error("expected id")
+        if (!match(TokenType.STRUCT))
+            throw SyntaxException("expected struct")
+        if (peek().type != TokenType.IDENTIFIER)
+            throw SyntaxException("expected id")
         val structName = consume()
         if (match(TokenType.LeftBrace)) {
             val fields = parseStructFields()
-            if (!match(TokenType.RightBrace)) error("expected }")
+            if (!match(TokenType.RightBrace))
+                throw SyntaxException("expected }")
             return StructItemNode(structName, fields)
         } else {
-            if (!match(TokenType.Semicolon)) error("expected ;")
+            if (!match(TokenType.Semicolon))
+                throw SyntaxException("expected ;")
             return StructItemNode(structName, null)
         }
     }
@@ -1041,36 +1133,45 @@ class Parser(private val tokens: List<Token>) {
             if (peek().type == TokenType.RightBrace) break
             else fields.add(parseStructField())
         }
-        if (peek().type != TokenType.RightBrace) error("expected {")
+        if (peek().type != TokenType.RightBrace)
+            throw SyntaxException("expected {")
         return fields
     }
 
     fun parseStructField(): StructField {
-        if (peek().type != TokenType.IDENTIFIER) error("expected id")
+        if (peek().type != TokenType.IDENTIFIER)
+            throw SyntaxException("expected id")
         val name = consume()
-        if (!match(TokenType.Colon)) error("expected :")
+        if (!match(TokenType.Colon))
+            throw SyntaxException("expected :")
         val type = parseType()
         return StructField(name, type)
     }
 
     fun parseEnumItem(): EnumItemNode {
-        if (!match(TokenType.ENUM)) error("expected enum")
-        if (peek().type != TokenType.IDENTIFIER) error("expected id")
+        if (!match(TokenType.ENUM))
+            throw SyntaxException("expected enum")
+        if (peek().type != TokenType.IDENTIFIER)
+            throw SyntaxException("expected id")
         val name = consume()
-        if (!match(TokenType.LeftBrace)) error("expected {")
+        if (!match(TokenType.LeftBrace))
+            throw SyntaxException("expected {")
         val variants = parseVariants()
-        if (!match(TokenType.RightBrace)) error("expected }")
+        if (!match(TokenType.RightBrace))
+            throw SyntaxException("expected }")
         return EnumItemNode(name, variants)
     }
 
     fun parseVariants(): List<Token> {
         val variants = mutableListOf<Token>()
-        if (peek().type != TokenType.IDENTIFIER) error("expected id")
+        if (peek().type != TokenType.IDENTIFIER)
+            throw SyntaxException("expected id")
         variants.add(consume())
         while (match(TokenType.Comma)) {
             if (peek().type == TokenType.RightBrace) break
             else {
-                if (peek().type != TokenType.IDENTIFIER) error("expected id")
+                if (peek().type != TokenType.IDENTIFIER)
+                    throw SyntaxException("expected id")
                 else variants.add(consume())
             }
         }
@@ -1078,30 +1179,38 @@ class Parser(private val tokens: List<Token>) {
     }
 
     fun parseConstantItem(): ConstantItemNode {
-        if (!match(TokenType.CONST)) error("expected const")
-        if (peek().type != TokenType.IDENTIFIER) error("expected id")
+        if (!match(TokenType.CONST))
+            throw SyntaxException("expected const")
+        if (peek().type != TokenType.IDENTIFIER)
+            throw SyntaxException("expected id")
         val constantName = consume()
-        if (!match(TokenType.Colon)) error("expected :")
+        if (!match(TokenType.Colon))
+            throw SyntaxException("expected :")
         val constantType = parseType()
         val value = if (match(TokenType.Eq)) {
             parseExpr(0)
         } else {
             null
         }
-        if (!match(TokenType.Semicolon)) error("expected ;")
+        if (!match(TokenType.Semicolon))
+            throw SyntaxException("expected ;")
         return ConstantItemNode(constantName, constantType, value)
     }
 
     fun parseTraitItem(): TraitItemNode {
-        if (!match(TokenType.TRAIT)) error("expected trait")
-        if (peek().type != TokenType.IDENTIFIER) error("expected id")
+        if (!match(TokenType.TRAIT))
+            throw SyntaxException("expected trait")
+        if (peek().type != TokenType.IDENTIFIER)
+            throw SyntaxException("expected id")
         val traitName = consume()
-        if (!match(TokenType.LeftBrace)) error("expected {")
+        if (!match(TokenType.LeftBrace))
+            throw SyntaxException("expected {")
         val items = mutableListOf<ItemNode>()
         while (peek().type != TokenType.RightBrace) {
             items.add(parseAssociatedItem())
         }
-        if (!match(TokenType.RightBrace)) error("expected }")
+        if (!match(TokenType.RightBrace))
+            throw SyntaxException("expected }")
         return TraitItemNode(traitName, items)
     }
 
@@ -1113,26 +1222,30 @@ class Parser(private val tokens: List<Token>) {
                 else parseConstantItem()
             }
 
-            else -> error("expected associated const or fn")
+            else -> throw SyntaxException("expected associated const or fn")
         }
     }
 
     fun parseImplItem(): ImplItemNode {
-        if (!match(TokenType.IMPL)) error("expected impl")
+        if (!match(TokenType.IMPL))
+            throw SyntaxException("expected impl")
         val implName = if (peek().type == TokenType.IDENTIFIER &&
             ahead(1).type == TokenType.FOR
         ) {
             val implName = consume()
-            if (!match(TokenType.FOR)) error("expected for")
+            if (!match(TokenType.FOR))
+                throw SyntaxException("expected for")
             implName
         } else null
         val implType = parseType()
         val items = mutableListOf<ItemNode>()
-        if (!match(TokenType.LeftBrace)) error("expected {")
+        if (!match(TokenType.LeftBrace))
+            throw SyntaxException("expected {")
         while (peek().type != TokenType.RightBrace) {
             items.add(parseAssociatedItem())
         }
-        if (!match(TokenType.RightBrace)) error("expected }")
+        if (!match(TokenType.RightBrace))
+            throw SyntaxException("expected }")
         return ImplItemNode(implName, implType, items)
     }
 }

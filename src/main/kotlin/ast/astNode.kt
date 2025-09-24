@@ -20,6 +20,10 @@ enum class NodeType {
 sealed class ASTNode {
     abstract val type: NodeType
     abstract fun accept(visitor: ASTVisitor)
+
+    fun printNode() {
+        println("$type")
+    }
 }
 
 data class CrateNode(
@@ -221,7 +225,7 @@ enum class ExprType {
 
 // Expr
 sealed class ExprNode : ASTNode() {
-    var resolvedType: ResolvedType = UnknownResolvedType() // expr的类型
+    //var resolvedType: ResolvedType = UnknownResolvedType() // expr的类型
     var exprType: ExprType = ExprType.Unknown // 左右值
 }
 
@@ -306,7 +310,7 @@ data class PathExprNode(
 ) : ExprWithoutBlockNode() {
     override val type: NodeType = NodeType.PathExpr
 
-    var resolvedSymbol: Symbol = UnknownSymbol()
+    //var resolvedSymbol: Symbol = UnknownSymbol()
 
     override fun accept(visitor: ASTVisitor) {
         visitor.visitPathExpr(this)
@@ -555,7 +559,7 @@ data class PredicateLoopExprNode(
     val block: BlockExprNode
 ) : LoopExprNode() {
     init {
-        resolvedType = UnitResolvedType()
+        //resolvedType = UnitResolvedType()
     }
 
     override val type: NodeType = NodeType.PredicateLoopExpr

@@ -46,7 +46,29 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
-      # 第 5 步：构建项目并运行测试
-      # ./gradlew build 会自动编译代码、运行测试并打包
-      - name: Build with Gradle
-        run: ./gradlew build --no-daemon
+      # 步骤 5: 构建可执行分发包
+      - name: Build the compiler with Gradle
+        run: ./gradlew installDist
+
+      # 步骤 6: 运行编译器测试
+      # 使用构建好的脚本来执行
+      - name: Run compiler tests
+        run: |
+          COMPILER_SCRIPT="./build/install/Rx-Compiler/bin/Rx-Compiler"
+
+          echo "--- Testing 'pass' cases ---"
+          for file in tests/pass/*.rx; do
+            echo "Testing (should pass): $file"
+            "$COMPILER_SCRIPT" "$file"
+          done
+
+          echo "--- Testing 'fail' cases ---"
+          for file in tests/fail/*.rx; do
+            echo "Testing (should fail): $file"
+            if ! "$COMPILER_SCRIPT" "$file"; then
+              echo "Compiler correctly failed for $file."
+            else
+              echo "ERROR: Compiler was expected to fail for $file, but it succeeded."
+              exit 1
+            fi
+          done
