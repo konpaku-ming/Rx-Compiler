@@ -126,7 +126,7 @@ class ImplRegistry {
 }
 
 enum class ScopeKind {
-    Crate, Block, Function, Impl, Trait, Struct, Enum
+    Crate, Block, Function, Impl, Trait, Struct, Enum,Loop
 }
 
 // scope
