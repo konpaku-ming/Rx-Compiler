@@ -180,7 +180,6 @@ class Parser(private val tokens: List<Token>) {
             TokenType.BREAK,
             TokenType.CONTINUE,
             TokenType.RETURN,
-            TokenType.Underscore,
             TokenType.MATCH -> true
 
             else -> false
@@ -254,7 +253,6 @@ class Parser(private val tokens: List<Token>) {
             TokenType.BREAK -> parseBreakExpr(consume())
             TokenType.CONTINUE -> parseContinueExpr(consume())
             TokenType.RETURN -> parseReturnExpr(consume())
-            TokenType.Underscore -> parseUnderscoreExpr(consume())
 
             else -> throw SyntaxException("unexpected prefix token")
         }
@@ -847,10 +845,8 @@ class Parser(private val tokens: List<Token>) {
 
     fun parsePattern(): PatternNode {
         return when (peek().type) {
-            TokenType.Underscore -> parseWildcardPattern()
             TokenType.And -> parseReferencePattern()
             TokenType.BitAnd -> parseReferencePattern()
-            TokenType.REF -> parseIdentifierPattern()
             TokenType.MUT -> parseIdentifierPattern()
             TokenType.IDENTIFIER -> parseIdentifierPattern()
 
@@ -859,18 +855,11 @@ class Parser(private val tokens: List<Token>) {
     }
 
     fun parseIdentifierPattern(): IdentifierPatternNode {
-        val isRef = match(TokenType.REF)
         val isMut = match(TokenType.MUT)
         if (peek().type != TokenType.IDENTIFIER)
             throw SyntaxException("expected identifier")
         val name = consume()
-        return IdentifierPatternNode(name, isRef, isMut)
-    }
-
-    fun parseWildcardPattern(): WildcardPatternNode {
-        if (!match(TokenType.Underscore))
-            throw SyntaxException("expected _")
-        return WildcardPatternNode()
+        return IdentifierPatternNode(name, isMut)
     }
 
     fun parseReferencePattern(): ReferencePatternNode {
@@ -960,11 +949,6 @@ class Parser(private val tokens: List<Token>) {
         } else return ReturnExprNode(null)
     }
 
-    fun parseUnderscoreExpr(cur: Token): UnderscoreExprNode {
-        if (cur.type != TokenType.Underscore)
-            throw SyntaxException("expected _")
-        return UnderscoreExprNode()
-    }
 
     fun parseStmt(): StmtNode {
         return when (peek().type) {
@@ -1001,14 +985,7 @@ class Parser(private val tokens: List<Token>) {
             TokenType.FN -> parseFunctionItem()
             TokenType.STRUCT -> parseStructItem()
             TokenType.ENUM -> parseEnumItem()
-            TokenType.CONST -> {
-                when (ahead(1).type) {
-                    TokenType.FN -> parseFunctionItem()
-                    TokenType.IDENTIFIER -> parseConstantItem()
-                    else -> throw SyntaxException("unexpected token in item")
-                }
-            }
-
+            TokenType.CONST -> parseConstantItem()
             TokenType.TRAIT -> parseTraitItem()
             TokenType.IMPL -> parseImplItem()
             else -> throw SyntaxException("unexpected token in item")
@@ -1016,7 +993,6 @@ class Parser(private val tokens: List<Token>) {
     }
 
     fun parseFunctionItem(): FunctionItemNode {
-        val isConst = match(TokenType.CONST)
         if (!match(TokenType.FN))
             throw SyntaxException("expected fn")
         if (peek().type != TokenType.IDENTIFIER)
@@ -1034,15 +1010,15 @@ class Parser(private val tokens: List<Token>) {
         if (peek().type == TokenType.LeftBrace) {
             val body = parseBlockExpr(consume())
             return FunctionItemNode(
-                isConst, fnName, selfParam,
+                fnName, selfParam,
                 params, returnType, body
             )
         } else {
             if (!match(TokenType.Semicolon))
                 throw SyntaxException("expected ;")
             return FunctionItemNode(
-                isConst, fnName, selfParam,
-                params, returnType, null
+                fnName, selfParam,
+                params, returnType, body = null
             )
         }
     }
@@ -1091,12 +1067,7 @@ class Parser(private val tokens: List<Token>) {
         val isMut = match(TokenType.MUT)
         if (!match(TokenType.SELF))
             throw SyntaxException("expected self")
-        var selfType: TypeNode? = null
-        if (match(TokenType.Colon)) {
-            if (isRef) throw SyntaxException("unexpected :")
-            selfType = parseType()
-        }
-        return SelfParam(isMut, isRef, selfType)
+        return SelfParam(isMut, isRef)
     }
 
     fun parseFunctionParam(): FunctionParam {

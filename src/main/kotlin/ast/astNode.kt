@@ -13,8 +13,8 @@ enum class NodeType {
     ArrayList, ArrayLength, IndexExpr,
     StructExpr, CallExpr, MethodCallExpr, FieldExpr,
     InfiniteLoopExpr, PredicateLoopExpr, BreakExpr, ContinueExpr, IfExpr,
-    ReturnExpr, UnderscoreExpr,
-    IdentifierPattern, WildcardPattern, ReferencePattern,
+    ReturnExpr,
+    IdentifierPattern, ReferencePattern,
 }
 
 sealed class ASTNode {
@@ -42,7 +42,6 @@ sealed class ItemNode : ASTNode()
 data class SelfParam(
     val isMut: Boolean,
     val isRef: Boolean,
-    val selfType: TypeNode?
 )
 
 data class FunctionParam(
@@ -51,7 +50,6 @@ data class FunctionParam(
 )
 
 data class FunctionItemNode(
-    val isConst: Boolean,
     val fnName: Token,
     val selfParam: SelfParam?,
     val params: List<FunctionParam>,
@@ -593,33 +591,16 @@ data class ReturnExprNode(val value: ExprNode?) : ExprWithoutBlockNode() {
     }
 }
 
-class UnderscoreExprNode() : ExprWithoutBlockNode() {
-    override val type: NodeType = NodeType.UnderscoreExpr
-
-    override fun accept(visitor: ASTVisitor) {
-        visitor.visitUnderscoreExpr(this)
-    }
-}
-
 sealed class PatternNode : ASTNode()
 
 data class IdentifierPatternNode(
     val name: Token,
-    val isRef: Boolean,
     val isMut: Boolean,
 ) : PatternNode() {
     override val type: NodeType = NodeType.IdentifierPattern
 
     override fun accept(visitor: ASTVisitor) {
         visitor.visitIdentifierPattern(this)
-    }
-}
-
-class WildcardPatternNode() : PatternNode() {
-    override val type: NodeType = NodeType.WildcardPattern
-
-    override fun accept(visitor: ASTVisitor) {
-        visitor.visitWildcardPattern(this)
     }
 }
 
