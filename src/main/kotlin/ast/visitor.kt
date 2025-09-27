@@ -1,5 +1,7 @@
 package ast
 
+/*
+
 interface ASTVisitor {
     // Crate
     fun visitCrate(node: CrateNode)
@@ -64,3 +66,4 @@ interface ASTVisitor {
     fun visitWildcardPattern(node: WildcardPatternNode)
     fun visitReferencePattern(node: ReferencePatternNode)
 }
+*/
