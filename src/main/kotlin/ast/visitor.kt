@@ -1,6 +1,5 @@
 package ast
 
-/*
 
 interface ASTVisitor {
     // Crate
@@ -16,15 +15,8 @@ interface ASTVisitor {
 
     // Stmt
     fun visitEmptyStmt(node: EmptyStmtNode)
-    fun visitItemStmt(node: ItemStmtNode)
     fun visitLetStmt(node: LetStmtNode)
     fun visitExprStmt(node: ExprStmtNode)
-
-    // Type
-    fun visitTypePath(node: TypePathNode)
-    fun visitReferenceType(node: ReferenceTypeNode)
-    fun visitArrayType(node: ArrayTypeNode)
-    fun visitUnitType(node: UnitTypeNode)
 
     // Expr
     fun visitIntLiteralExpr(node: IntLiteralExprNode)
@@ -59,11 +51,4 @@ interface ASTVisitor {
     fun visitBreakExpr(node: BreakExprNode)
     fun visitContinueExpr(node: ContinueExprNode)
     fun visitReturnExpr(node: ReturnExprNode)
-    fun visitUnderscoreExpr(node: UnderscoreExprNode)
-
-    // Pattern
-    fun visitIdentifierPattern(node: IdentifierPatternNode)
-    fun visitWildcardPattern(node: WildcardPatternNode)
-    fun visitReferencePattern(node: ReferencePatternNode)
 }
-*/

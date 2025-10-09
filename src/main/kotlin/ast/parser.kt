@@ -2,70 +2,6 @@ package ast
 
 import exception.SyntaxException
 
-fun stringToInt(str: String): Int {
-    var tempStr = str.replace("_", "")
-    var base = 10
-    if (tempStr.startsWith("0b")) {
-        base = 2
-        tempStr = tempStr.substring(2)
-    } else if (tempStr.startsWith("0o")) {
-        base = 8
-        tempStr = tempStr.substring(2)
-    } else if (tempStr.startsWith("0x")) {
-        base = 16
-        tempStr = tempStr.substring(2)
-    }
-    return tempStr.toInt(base)
-}
-
-fun stringToChar(str: String): Char {
-    val tempStr = str.substring(1, str.length - 1)
-    return if (tempStr.length == 1) tempStr[0]
-    else {
-        if (tempStr.startsWith("\\n")) '\n'
-        else if (tempStr.startsWith("\\r")) '\r'
-        else if (tempStr.startsWith("\\t")) '\t'
-        else if (tempStr.startsWith("\\'")) '\''
-        else if (tempStr.startsWith("\\\"")) '\"'
-        else if (tempStr.startsWith("\\\\")) '\\'
-        else if (tempStr.startsWith("\\0")) '\u0000'
-        else if (tempStr.startsWith("\\x"))
-            tempStr.substring(2).toInt(16).toChar()
-        else throw SyntaxException("invalid char '$str'")
-    }
-}
-
-fun stringToString(str: String): String {
-    val tempStr = str.substring(1, str.length - 1)
-    val builder = StringBuilder()
-    var i = 0
-    while (i < tempStr.length) {
-        val c = tempStr[i]
-        i++
-        if (c != '\\') {
-            builder.append(c)
-        } else {
-            when (tempStr[i]) {
-                'n' -> builder.append('\n')
-                'r' -> builder.append('\r')
-                't' -> builder.append('\t')
-                '"' -> builder.append('"')
-                '\'' -> builder.append('\'')
-                '\\' -> builder.append('\\')
-                '0' -> builder.append('\u0000')
-                'x' -> {
-                    builder.append(tempStr.substring(i + 1, i + 3).toInt(16).toChar())
-                    i += 2
-                }
-
-                else -> throw SyntaxException("invalid escape")
-            }
-            i++
-        }
-    }
-    return builder.toString()
-}
-
 fun getPrecedence(tokenType: TokenType): Int {
     return when (tokenType) {
         TokenType.DoubleColon -> 15
@@ -358,6 +294,7 @@ class Parser(private val tokens: List<Token>) {
     }
 
     fun parseArrayType(cur: Token): TypeNode {
+        println("parsing ArrayType")
         if (cur.type != TokenType.LeftBracket)
             throw SyntaxException("expected [")
         val elementType = parseType()
@@ -727,6 +664,7 @@ class Parser(private val tokens: List<Token>) {
     }
 
     fun parseArrayExpr(cur: Token): ArrayExprNode {
+        println("parsing ArrayExpr")
         if (cur.type != TokenType.LeftBracket)
             throw SyntaxException("expected [")
         val element = mutableListOf<ExprNode>()
@@ -875,7 +813,7 @@ class Parser(private val tokens: List<Token>) {
         }
     }
 
-    fun parseCondition(): Condition {
+    fun parseCondition(): ExprNode {
         if (!match(TokenType.LeftParen))
             throw SyntaxException("expected (")
         val expr = parseExpr(0)
@@ -884,7 +822,7 @@ class Parser(private val tokens: List<Token>) {
         }
         if (!match(TokenType.RightParen))
             throw SyntaxException("expected )")
-        return Condition(expr)
+        return expr
     }
 
     fun parseIfExpr(cur: Token): IfExprNode {
@@ -937,7 +875,7 @@ class Parser(private val tokens: List<Token>) {
     fun parseContinueExpr(cur: Token): ContinueExprNode {
         if (cur.type != TokenType.CONTINUE)
             throw SyntaxException("expected continue")
-        return ContinueExprNode()
+        return ContinueExprNode
     }
 
     fun parseReturnExpr(cur: Token): ReturnExprNode {
@@ -961,7 +899,7 @@ class Parser(private val tokens: List<Token>) {
     fun parseEmptyStmt(cur: Token): EmptyStmtNode {
         if (cur.type != TokenType.Semicolon)
             throw SyntaxException("expected ;")
-        return EmptyStmtNode(cur)
+        return EmptyStmtNode
     }
 
     fun parseLetStmt(cur: Token): LetStmtNode {
@@ -1158,14 +1096,14 @@ class Parser(private val tokens: List<Token>) {
         if (!match(TokenType.Colon))
             throw SyntaxException("expected :")
         val constantType = parseType()
-        val value = if (match(TokenType.Eq)) {
+        val valueExpr = if (match(TokenType.Assign)) {
             parseExpr(0)
         } else {
             null
         }
         if (!match(TokenType.Semicolon))
             throw SyntaxException("expected ;")
-        return ConstantItemNode(constantName, constantType, value)
+        return ConstantItemNode(constantName, constantType, valueExpr)
     }
 
     fun parseTraitItem(): TraitItemNode {

@@ -3,7 +3,7 @@ package ast
 enum class NodeType {
     Crate,
     FunctionItem, StructItem, EnumItem, ConstantItem, TraitItem, ImplItem,
-    EmptyStmt, ItemStmt, LetStmt, ExprStmt,
+    EmptyStmt, LetStmt, ExprStmt,
     TypePath, ReferenceType, ArrayType, UnitType,
     IntLiteralExpr, CharLiteralExpr, StringLiteralExpr, BooleanLiteralExpr,
     CStringLiteralExpr, RawStringLiteralExpr, RawCStringLiteralExpr,
@@ -19,11 +19,11 @@ enum class NodeType {
 
 sealed class ASTNode {
     abstract val type: NodeType
-    abstract fun accept(visitor: ASTVisitor)
-
     fun printNode() {
         println("$type")
     }
+
+    var isBottom: Boolean = false // 标记是否会在所有分支上return
 }
 
 data class CrateNode(
@@ -31,13 +31,18 @@ data class CrateNode(
 ) : ASTNode() {
     override val type: NodeType = NodeType.Crate
 
-    override fun accept(visitor: ASTVisitor) {
+    fun accept(visitor: ASTVisitor) {
         visitor.visitCrate(this)
     }
+
+    var scopePosition: Scope? = null // 初始为null 第一次pass时记录处在哪个Scope中
 }
 
 // Item
-sealed class ItemNode : ASTNode()
+sealed class ItemNode : ASTNode() {
+    abstract fun accept(visitor: ASTVisitor)
+    var scopePosition: Scope? = null // 初始为null 第一次pass时记录处在哪个Scope中
+}
 
 data class SelfParam(
     val isMut: Boolean,
@@ -116,35 +121,28 @@ data class TraitItemNode(
 data class ImplItemNode(
     val traitName: Token?,
     val implType: TypeNode,
-    val methods: List<ItemNode>
+    val associatedItems: List<ItemNode>
 ) : ItemNode() {
     override val type: NodeType = NodeType.ImplItem
 
     override fun accept(visitor: ASTVisitor) {
         visitor.visitImplItem(this)
     }
+
+    var implScopePosition: ImplScope? = null // 对应的ImplScope
 }
 
 // Stmt
-sealed class StmtNode : ASTNode()
+sealed class StmtNode : ASTNode() {
+    abstract fun accept(visitor: ASTVisitor)
+    var scopePosition: Scope? = null // 初始为null 第一次pass时记录处在哪个Scope中
+}
 
-data class EmptyStmtNode(
-    val semicolon: Token,
-) : StmtNode() {
+object EmptyStmtNode : StmtNode() {
     override val type: NodeType = NodeType.EmptyStmt
 
     override fun accept(visitor: ASTVisitor) {
         visitor.visitEmptyStmt(this)
-    }
-}
-
-data class ItemStmtNode(
-    val item: ItemNode,
-) : StmtNode() {
-    override val type: NodeType = NodeType.ItemStmt
-
-    override fun accept(visitor: ASTVisitor) {
-        visitor.visitItemStmt(this)
     }
 }
 
@@ -158,6 +156,8 @@ data class LetStmtNode(
     override fun accept(visitor: ASTVisitor) {
         visitor.visitLetStmt(this)
     }
+
+    var variableResolvedType: ResolvedType = UnknownResolvedType
 }
 
 data class ExprStmtNode(
@@ -181,21 +181,13 @@ data class TypePathNode(
     val path: PathSegment,
 ) : TypeNode() {
     override val type: NodeType = NodeType.TypePath
-
-    override fun accept(visitor: ASTVisitor) {
-        visitor.visitTypePath(this)
-    }
 }
 
 data class ReferenceTypeNode(
     val isMut: Boolean,
-    val tar: TypeNode
+    val inner: TypeNode
 ) : TypeNode() {
     override val type: NodeType = NodeType.ReferenceType
-
-    override fun accept(visitor: ASTVisitor) {
-        visitor.visitReferenceType(this)
-    }
 }
 
 data class ArrayTypeNode(
@@ -203,18 +195,10 @@ data class ArrayTypeNode(
     val length: ExprNode
 ) : TypeNode() {
     override val type: NodeType = NodeType.ArrayType
-
-    override fun accept(visitor: ASTVisitor) {
-        visitor.visitArrayType(this)
-    }
 }
 
 class UnitTypeNode() : TypeNode() {
     override val type: NodeType = NodeType.UnitType
-
-    override fun accept(visitor: ASTVisitor) {
-        visitor.visitUnitType(this)
-    }
 }
 
 enum class ExprType {
@@ -223,8 +207,10 @@ enum class ExprType {
 
 // Expr
 sealed class ExprNode : ASTNode() {
-    //var resolvedType: ResolvedType = UnknownResolvedType() // expr的类型
+    var resolvedType: ResolvedType = UnknownResolvedType // expr的类型
     var exprType: ExprType = ExprType.Unknown // 左右值
+    abstract fun accept(visitor: ASTVisitor)
+    var scopePosition: Scope? = null // 初始为null 第一次pass时记录处在哪个Scope中
 }
 
 sealed class ExprWithoutBlockNode : ExprNode()
@@ -307,8 +293,6 @@ data class PathExprNode(
     val second: PathSegment?
 ) : ExprWithoutBlockNode() {
     override val type: NodeType = NodeType.PathExpr
-
-    //var resolvedSymbol: Symbol = UnknownSymbol()
 
     override fun accept(visitor: ASTVisitor) {
         visitor.visitPathExpr(this)
@@ -407,6 +391,8 @@ data class TypeCastExprNode(
     override fun accept(visitor: ASTVisitor) {
         visitor.visitTypeCastExpr(this)
     }
+
+    var targetResolvedType: ResolvedType = UnknownResolvedType
 }
 
 data class AssignExprNode(
@@ -456,13 +442,15 @@ data class ArrayListExprNode(
 
 data class ArrayLengthExprNode(
     val element: ExprNode,
-    val length: ExprNode
+    val lengthExpr: ExprNode
 ) : ArrayExprNode() {
     override val type: NodeType = NodeType.ArrayLength
 
     override fun accept(visitor: ASTVisitor) {
         visitor.visitArrayLengthExpr(this)
     }
+
+    var length: Int = -1;
 }
 
 data class IndexExprNode(
@@ -526,10 +514,8 @@ data class FieldExprNode(
     }
 }
 
-data class Condition(val expr: ExprNode)
-
 data class IfExprNode(
-    val condition: Condition,
+    val condition: ExprNode,
     val thenBranch: BlockExprNode,
     val elseBranch: ExprNode?
 ) : ExprWithBlockNode() {
@@ -553,13 +539,9 @@ data class InfiniteLoopExprNode(
 }
 
 data class PredicateLoopExprNode(
-    val condition: Condition,
+    val condition: ExprNode,
     val block: BlockExprNode
 ) : LoopExprNode() {
-    init {
-        //resolvedType = UnitResolvedType()
-    }
-
     override val type: NodeType = NodeType.PredicateLoopExpr
 
     override fun accept(visitor: ASTVisitor) {
@@ -575,7 +557,7 @@ data class BreakExprNode(val value: ExprNode?) : ExprWithoutBlockNode() {
     }
 }
 
-class ContinueExprNode() : ExprWithoutBlockNode() {
+object ContinueExprNode : ExprWithoutBlockNode() {
     override val type: NodeType = NodeType.ContinueExpr
 
     override fun accept(visitor: ASTVisitor) {
@@ -598,10 +580,6 @@ data class IdentifierPatternNode(
     val isMut: Boolean,
 ) : PatternNode() {
     override val type: NodeType = NodeType.IdentifierPattern
-
-    override fun accept(visitor: ASTVisitor) {
-        visitor.visitIdentifierPattern(this)
-    }
 }
 
 data class ReferencePatternNode(
@@ -609,8 +587,4 @@ data class ReferencePatternNode(
     val inner: PatternNode
 ) : PatternNode() {
     override val type: NodeType = NodeType.ReferencePattern
-
-    override fun accept(visitor: ASTVisitor) {
-        visitor.visitReferencePattern(this)
-    }
 }

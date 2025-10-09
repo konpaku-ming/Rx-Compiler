@@ -1,206 +1,204 @@
 package ast
 
-/*
-// symbol
-enum class SymbolKind {
-    VariableSymbol,
-    FunctionSymbol,
-    StructSymbol,
-    EnumSymbol,
-    TraitSymbol,
-    ConstantSymbol,
-    UnknownSymbol,
-    VariantSymbol
-}
+import exception.SemanticException
 
+// symbol
 sealed class Symbol {
     abstract val name: String
-    abstract val kind: SymbolKind
 }
 
 data class VariableSymbol(
     override val name: String,
     val type: ResolvedType,
     val isMut: Boolean
-) : Symbol() {
-    override val kind = SymbolKind.VariableSymbol
-}
+) : Symbol()
 
-data class FunctionParameter(
+data class SelfParameter(
+    val paramType: ResolvedType, // 原始的self类型
+    val isMut: Boolean,
+    val isRef: Boolean,
+)
+
+data class Parameter(
     val name: String,
     val paramType: ResolvedType,
-    val isSelf: Boolean,
     val isMut: Boolean,
-    val isRef: Boolean
 )
 
 data class FunctionSymbol(
     override val name: String,
-    val parameters: List<FunctionParameter>,
+    val selfParameter: SelfParameter?,
+    val parameters: List<Parameter>,
     val returnType: ResolvedType,
+    val isMethod: Boolean,
     val isAssociated: Boolean,
-    val isMethod: Boolean
-) : Symbol() {
-    override val kind = SymbolKind.FunctionSymbol
-}
+    val isDefined: Boolean = true // 是否定义
+) : Symbol()
 
 data class ConstantSymbol(
     override val name: String,
     val type: ResolvedType,
-    val value: Any?, // null表示为trait里的
-    val isAssociated: Boolean
-) : Symbol() {
-    override val kind = SymbolKind.ConstantSymbol
-}
+    val valueExpr: ExprNode?,
+    var value: Any?,
+    val isAssociated: Boolean,
+    val isDefined: Boolean = true // 是否定义
+) : Symbol()
 
 data class StructSymbol(
     override val name: String,
-    val fields: Map<String, ResolvedType>, // fieldName to fieldType
-) : Symbol() {
-    override val kind = SymbolKind.StructSymbol
-}
+    val fields: MutableMap<String, ResolvedType>, // fieldName to fieldType
+    val functions: MutableMap<String, FunctionSymbol> = mutableMapOf(),
+    val methods: MutableMap<String, FunctionSymbol> = mutableMapOf(),
+    val constants: MutableMap<String, ConstantSymbol> = mutableMapOf()
+) : Symbol()
 
 data class EnumSymbol(
     override val name: String,
     val variants: List<String>, // variants
-) : Symbol() {
-    override val kind = SymbolKind.EnumSymbol
-}
+) : Symbol()
 
 data class VariantSymbol(
     override val name: String,
     val type: ResolvedType,
-) : Symbol() {
-    override val kind = SymbolKind.VariantSymbol // 仅作为resolvePathExpr的返回值
-}
+) : Symbol()
 
 data class TraitSymbol(
     override val name: String,
     val functions: MutableMap<String, FunctionSymbol> = mutableMapOf(),
     val methods: MutableMap<String, FunctionSymbol> = mutableMapOf(),
     val constants: MutableMap<String, ConstantSymbol> = mutableMapOf()
-) : Symbol() {
-    override val kind = SymbolKind.TraitSymbol
-}
+) : Symbol()
 
 class UnknownSymbol : Symbol() {
-    override val name: String = "<unknown>"
-    override val kind = SymbolKind.UnknownSymbol
-}
-
-// impl register
-data class Impl(
-    val implType: ResolvedType,
-    val trait: TraitSymbol?,
-    val functions: MutableMap<String, FunctionSymbol> = mutableMapOf(),
-    val methods: MutableMap<String, FunctionSymbol> = mutableMapOf(),
-    val constants: MutableMap<String, ConstantSymbol> = mutableMapOf()
-)
-
-class ImplRegistry {
-    private val impls: MutableMap<ResolvedType, MutableList<Impl>> = mutableMapOf()
-
-    fun register(impl: Impl) {
-        val targetImpl = impls[impl.implType]
-        if (targetImpl != null) {
-            targetImpl.add(impl)
-        } else {
-            impls[impl.implType] = mutableListOf(impl)
-        }
-    }
-
-    fun getImplsForType(type: ResolvedType): List<Impl> {
-        val targetImpl = impls[type]
-        return targetImpl ?: emptyList()
-    }
-
-    fun getTraitImpl(type: ResolvedType, trait: TraitSymbol?): Impl? {
-        val targetImpl = getImplsForType(type)
-        for (impl in targetImpl) {
-            if (impl.trait == trait) {
-                return impl
-            }
-        }
-        return null
-    }
+    override val name: String = "<unknown>" // 表示尚未被解析出的Symbol
 }
 
 enum class ScopeKind {
-    Crate, Block, Function, Impl, Trait, Struct, Enum,Loop
+    Crate, Block, Function, Impl, Trait, Loop
 }
 
-// scope
-class Scope(
-    val parent: Scope? = null, // 上一层scope
-    val kind: ScopeKind,
-    val traitContext: TraitSymbol? = null // 方法解析时使用
-) {
-    private val symbols = mutableMapOf<String, Symbol>()
+sealed class Scope {
+    abstract val parent: Scope? // 上一层scope
+    abstract val children: MutableList<Scope>
+    abstract val kind: ScopeKind
+    val symbols = mutableMapOf<String, Symbol>()
 
     fun define(symbol: Symbol) {
         symbols[symbol.name] = symbol
-    }
-
-    fun lookupLocal(name: String): Symbol? {
-        // 仅在本scope里查找Symbol
-        return symbols[name]
     }
 
     fun lookup(name: String): Symbol? {
         return symbols[name] ?: parent?.lookup(name)
     }
 
-    fun containsLocal(name: String): Boolean {
-        return symbols.containsKey(name)
+    fun lookupLocal(name: String): Symbol? {
+        return symbols[name]
     }
-
-    fun allSymbols(): Map<String, Symbol> = symbols
 }
 
-class ScopeStack {
-    private val scopeStack = ArrayDeque<Scope>()
+data class CrateScope(
+    override val parent: Scope? = null, // 上一层scope
+    override val children: MutableList<Scope> = mutableListOf(),
+) : Scope() {
+    override val kind: ScopeKind = ScopeKind.Crate
+}
 
-    init {
-        // 初始位于 global scope
-        scopeStack.addFirst(Scope(null))
+data class BlockScope(
+    override val parent: Scope? = null, // 上一层scope
+    override val children: MutableList<Scope> = mutableListOf(),
+) : Scope() {
+    override val kind: ScopeKind = ScopeKind.Block
+}
+
+data class FunctionScope(
+    override val parent: Scope? = null, // 上一层scope
+    override val children: MutableList<Scope> = mutableListOf(),
+    var returnType: ResolvedType,
+    val functionSymbol: FunctionSymbol,
+) : Scope() {
+    override val kind: ScopeKind = ScopeKind.Function
+}
+
+data class ImplScope(
+    override val parent: Scope? = null, // 上一层scope
+    override val children: MutableList<Scope> = mutableListOf(),
+    val implType: ResolvedType, // 实现的type
+    val traitName: String?, // 第一次pass时只做到记录name
+    val implTrait: TraitSymbol? = null // 后续再连到traitSymbol
+) : Scope() {
+    override val kind: ScopeKind = ScopeKind.Impl
+}
+
+data class TraitScope(
+    override val parent: Scope? = null, // 上一层scope
+    override val children: MutableList<Scope> = mutableListOf(),
+    val traitSymbol: TraitSymbol,
+) : Scope() {
+    override val kind: ScopeKind = ScopeKind.Trait
+}
+
+data class LoopScope(
+    override val parent: Scope? = null, // 上一层scope
+    override val children: MutableList<Scope> = mutableListOf(),
+    var breakType: ResolvedType,
+) : Scope() {
+    override val kind: ScopeKind = ScopeKind.Loop
+}
+
+class ScopeTree {
+    var currentScope: Scope = CrateScope() // 建一个CrateScope
+
+    fun enterBlockScope() {
+        val newScope = BlockScope(parent = currentScope)
+        currentScope.children.add(newScope)
+        currentScope = newScope
     }
 
-    fun enterScope() {
-        val newScope = Scope(scopeStack.first())
-        scopeStack.addFirst(newScope)
+    fun enterFunctionScope(returnType: ResolvedType, functionSymbol: FunctionSymbol) {
+        val newScope = FunctionScope(
+            parent = currentScope,
+            returnType = returnType,
+            functionSymbol = functionSymbol
+        )
+        currentScope.children.add(newScope)
+        currentScope = newScope
+    }
+
+    fun enterImplScope(implType: ResolvedType, traitName: String?) {
+        val newScope = ImplScope(parent = currentScope, implType = implType, traitName = traitName)
+        currentScope.children.add(newScope)
+        currentScope = newScope
+    }
+
+    fun enterTraitScope(traitSymbol: TraitSymbol) {
+        val newScope = TraitScope(parent = currentScope, traitSymbol = traitSymbol)
+        currentScope.children.add(newScope)
+        currentScope = newScope
+    }
+
+    fun enterLoopScope(breakType: ResolvedType) {
+        val newScope = LoopScope(parent = currentScope, breakType = breakType)
+        currentScope.children.add(newScope)
+        currentScope = newScope
     }
 
     fun exitScope() {
-        if (scopeStack.size > 1) {
-            scopeStack.removeFirst()
+        if (currentScope.parent != null) {
+            currentScope = currentScope.parent!!
         } else {
-            error("error: exit global scope")
+            throw SemanticException("error: exit crate scope")
         }
     }
 
-    fun currentScope(): Scope = scopeStack.first()
-
     fun define(symbol: Symbol) {
-        currentScope().define(symbol)
+        currentScope.define(symbol)
     }
 
     fun lookup(name: String): Symbol? {
-        return currentScope().lookup(name)
+        return currentScope.lookup(name)
     }
 
     fun lookupLocal(name: String): Symbol? {
-        return currentScope().lookupLocal(name)
-    }
-
-    fun containsLocal(name: String): Boolean {
-        return currentScope().containsLocal(name)
-    }
-
-    fun dump() {
-        println("Scope Stack:")
-        scopeStack.forEachIndexed { i, scope ->
-            println("  Scope[$i]: ${scope.allSymbols().keys}")
-        }
+        return currentScope.lookupLocal(name)
     }
 }
-*/
