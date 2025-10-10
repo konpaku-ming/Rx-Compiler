@@ -2683,6 +2683,10 @@ fun typeCheck(left: ResolvedType, right: ResolvedType): Boolean {
             PrimitiveResolvedType("usize") -> true
             else -> false
         }
+    } else if (left is ReferenceResolvedType && right is ReferenceResolvedType) {
+        if (!typeCheck(left.inner, right.inner)) return false
+        if (left.isMut == right.isMut) return true
+        return !left.isMut
     } else false
 }
 
@@ -2699,7 +2703,8 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
 
     fun typeAddSubMulDivMod(left: ResolvedType, right: ResolvedType): ResolvedType {
         if (!isInt(left) || !isInt(right)) throw SemanticException(
-            "Arithmetic operator '+ - * /' requires numeric or bool operands"
+            "Arithmetic operator '+ - * /' requires numeric or bool operands" +
+                    "\nleft:'$left right:'$right'"
         )
         if (left == right) return left
         if (left == PrimitiveResolvedType("int")) return right
@@ -3299,7 +3304,8 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         if (isAssignee(node.left) && typeCheck(leftType, rightType)) {
             node.resolvedType = UnitResolvedType // AssignExpr is always unitType
         } else throw SemanticException(
-            "cannot assign to a immutable variable"
+            "cannot assign to a immutable variable or type mismatch: " +
+                    "left:'$leftType' right:'$rightType'"
         )
 
         scopeTree.currentScope = previousScope // 还原scope状态
@@ -3424,20 +3430,28 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         node.base.accept(this)
         node.index.accept(this)
 
-        node.exprType = when (node.base.exprType) {
-            ExprType.MutPlace -> ExprType.MutPlace
-            ExprType.Place -> ExprType.Place
-            ExprType.Value -> ExprType.MutPlace
-            ExprType.Unknown -> throw SemanticException(
-                "index base expr cannot be resolved"
-            )
-        }
         if (!typeCheck(PrimitiveResolvedType("usize"), node.index.resolvedType)) {
             throw SemanticException("Array length must be usize")
         }
         val elementType = when (val baseType = node.base.resolvedType) {
-            is ArrayResolvedType -> baseType.elementType
+            is ArrayResolvedType -> {
+                node.exprType = when (node.base.exprType) {
+                    ExprType.MutPlace -> ExprType.MutPlace
+                    ExprType.Place -> ExprType.Place
+                    ExprType.Value -> ExprType.MutPlace
+                    ExprType.Unknown -> throw SemanticException(
+                        "index base expr cannot be resolved"
+                    )
+                }
+                baseType.elementType
+            }
+
             is ReferenceResolvedType -> {
+                node.exprType = if (baseType.isMut) {
+                    ExprType.MutPlace
+                } else {
+                    ExprType.Place
+                }
                 val inner = baseType.inner as? ArrayResolvedType
                     ?: throw SemanticException("Cannot index into type $baseType")
                 inner.elementType
@@ -3507,14 +3521,20 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             }
             node.params[0].accept(this)
             if (!typeCheck(selfType, node.params[0].resolvedType)) {
-                throw SemanticException("parameter type mismatch")
+                throw SemanticException(
+                    "parameter 'self' type mismatch:" +
+                            " left:'$selfType' right:'${node.params[0].resolvedType}'"
+                )
             }
             for (index in 1..<node.params.size) {
                 val param = node.params[index]
                 param.accept(this)
                 val targetType = funcSymbol.parameters[index - 1].paramType
                 if (!typeCheck(targetType, param.resolvedType)) {
-                    throw SemanticException("parameter type mismatch")
+                    throw SemanticException(
+                        "parameter '${funcSymbol.parameters[index - 1].name}' " +
+                                "type mismatch: left:'$targetType' right:'${param.resolvedType}'"
+                    )
                 }
             }
         } else {
@@ -3527,7 +3547,10 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
                 param.accept(this)
                 val targetType = funcSymbol.parameters[index].paramType
                 if (!typeCheck(targetType, param.resolvedType)) {
-                    throw SemanticException("parameter type mismatch")
+                    throw SemanticException(
+                        "parameter '${funcSymbol.parameters[index].name}' " +
+                                "type mismatch: left:'$targetType' right:'${param.resolvedType}'"
+                    )
                 }
             }
         }
@@ -3559,7 +3582,11 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
                 val param = node.params[index]
                 param.accept(this)
                 if (!typeCheck(method.parameters[index].paramType, param.resolvedType)) {
-                    throw SemanticException("parameter type mismatch")
+                    throw SemanticException(
+                        "parameter '${method.parameters[index].name}' " +
+                                "type mismatch: left:'${method.parameters[index].paramType}' " +
+                                "right:'${param.resolvedType}'"
+                    )
                 }
             }
             node.resolvedType = method.returnType
