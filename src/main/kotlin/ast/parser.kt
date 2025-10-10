@@ -361,7 +361,7 @@ class Parser(private val tokens: List<Token>) {
                 val expr = parseExpr(0)
                 if (match(TokenType.Semicolon)) {
                     statements.add(ExprStmtNode(expr))
-                } else if (peek().type != TokenType.LeftBrace) {
+                } else if (peek().type != TokenType.RightBrace) {
                     if (expr is ExprWithoutBlockNode)
                         throw SyntaxException("ExprStmt must have block")
                     statements.add(ExprStmtNode(expr))

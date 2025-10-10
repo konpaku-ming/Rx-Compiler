@@ -41,6 +41,10 @@ data class ArrayResolvedType(
                 && length == other.length && length != -1
     }
 
+    override fun toString(): String {
+        return "Array(elementType='$name', length=$length)"
+    }
+
     override fun hashCode(): Int {
         var result = length
         result = 31 * result + elementType.hashCode()
@@ -145,7 +149,202 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             isDefined = true
         )
         scopeTree.define(exitFunction)
-        // TODO
+
+        val printFunction = FunctionSymbol(
+            name = "print",
+            selfParameter = null,
+            parameters = listOf(
+                Parameter(
+                    name = "s",
+                    paramType = ReferenceResolvedType(
+                        inner = PrimitiveResolvedType("str"),
+                        isMut = false
+                    ),
+                    isMut = false
+                )
+            ),
+            returnType = UnitResolvedType,
+            isMethod = false,
+            isAssociated = false,
+            isDefined = true
+        )
+        scopeTree.define(printFunction)
+
+        val printlnFunction = FunctionSymbol(
+            name = "println",
+            selfParameter = null,
+            parameters = listOf(
+                Parameter(
+                    name = "s",
+                    paramType = ReferenceResolvedType(
+                        inner = PrimitiveResolvedType("str"),
+                        isMut = false
+                    ),
+                    isMut = false
+                )
+            ),
+            returnType = UnitResolvedType,
+            isMethod = false,
+            isAssociated = false,
+            isDefined = true
+        )
+        scopeTree.define(printlnFunction)
+
+        val printIntFunction = FunctionSymbol(
+            name = "printInt",
+            selfParameter = null,
+            parameters = listOf(
+                Parameter(
+                    name = "n",
+                    paramType = PrimitiveResolvedType("i32"),
+                    isMut = false
+                )
+            ),
+            returnType = UnitResolvedType,
+            isMethod = false,
+            isAssociated = false,
+            isDefined = true
+        )
+        scopeTree.define(printIntFunction)
+
+        val printlnIntFunction = FunctionSymbol(
+            name = "printlnInt",
+            selfParameter = null,
+            parameters = listOf(
+                Parameter(
+                    name = "n",
+                    paramType = PrimitiveResolvedType("i32"),
+                    isMut = false
+                )
+            ),
+            returnType = UnitResolvedType,
+            isMethod = false,
+            isAssociated = false,
+            isDefined = true
+        )
+        scopeTree.define(printlnIntFunction)
+
+        val stringStruct = StructSymbol(
+            name = "String",
+            fields = mutableMapOf(),
+            functions = mutableMapOf(),
+            methods = mutableMapOf(),
+            constants = mutableMapOf(),
+        )
+        val fromFunction = FunctionSymbol(
+            name = "from",
+            selfParameter = null,
+            parameters = listOf(
+                Parameter(
+                    name = "s",
+                    paramType = ReferenceResolvedType(
+                        inner = PrimitiveResolvedType("str"),
+                        isMut = false
+                    ),
+                    isMut = false
+                )
+            ),
+            returnType = NamedResolvedType(name = "String", symbol = stringStruct),
+            isMethod = false,
+            isAssociated = true,
+            isDefined = true
+        )
+        stringStruct.functions[fromFunction.name] = fromFunction
+        val appendMethod = FunctionSymbol(
+            name = "from",
+            selfParameter = SelfParameter(
+                paramType = NamedResolvedType(name = "String", symbol = stringStruct),
+                isMut = true,
+                isRef = true
+            ),
+            parameters = listOf(
+                Parameter(
+                    name = "s",
+                    paramType = ReferenceResolvedType(
+                        inner = PrimitiveResolvedType("str"),
+                        isMut = false
+                    ),
+                    isMut = false
+                )
+            ),
+            returnType = UnitResolvedType,
+            isMethod = true,
+            isAssociated = true,
+            isDefined = true
+        )
+        stringStruct.methods[appendMethod.name] = appendMethod
+        val lenMethod = FunctionSymbol(
+            name = "len",
+            selfParameter = SelfParameter(
+                paramType = NamedResolvedType(name = "String", symbol = stringStruct),
+                isMut = false,
+                isRef = true
+            ),
+            parameters = emptyList(),
+            returnType = PrimitiveResolvedType("usize"),
+            isMethod = true,
+            isAssociated = true,
+            isDefined = true
+        )
+        stringStruct.methods[lenMethod.name] = lenMethod
+        val asStrMethod = FunctionSymbol(
+            name = "as_str",
+            selfParameter = SelfParameter(
+                paramType = NamedResolvedType(name = "String", symbol = stringStruct),
+                isMut = false,
+                isRef = true
+            ),
+            parameters = emptyList(),
+            returnType = ReferenceResolvedType(
+                inner = PrimitiveResolvedType("str"),
+                isMut = false
+            ),
+            isMethod = true,
+            isAssociated = true,
+            isDefined = true
+        )
+        stringStruct.methods[asStrMethod.name] = asStrMethod
+        val asMutStrMethod = FunctionSymbol(
+            name = "as_mut_str",
+            selfParameter = SelfParameter(
+                paramType = NamedResolvedType(name = "String", symbol = stringStruct),
+                isMut = true,
+                isRef = true
+            ),
+            parameters = emptyList(),
+            returnType = ReferenceResolvedType(
+                inner = PrimitiveResolvedType("str"),
+                isMut = true
+            ),
+            isMethod = true,
+            isAssociated = true,
+            isDefined = true
+        )
+        stringStruct.methods[asMutStrMethod.name] = asMutStrMethod
+        scopeTree.define(stringStruct)
+
+        val getStringFunction = FunctionSymbol(
+            name = "getString",
+            selfParameter = null,
+            parameters = emptyList(),
+            returnType = NamedResolvedType(name = "String", symbol = stringStruct),
+            isMethod = false,
+            isAssociated = false,
+            isDefined = true
+        )
+        scopeTree.define(getStringFunction)
+
+        val getIntFunction = FunctionSymbol(
+            name = "getInt",
+            selfParameter = null,
+            parameters = emptyList(),
+            returnType = PrimitiveResolvedType("i32"),
+            isMethod = false,
+            isAssociated = false,
+            isDefined = true
+        )
+        scopeTree.define(getIntFunction)
+        // TODO more builtin
 
         // 依次visit每个item
         for (item in node.items) {
@@ -1580,7 +1779,10 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
     }
 
     fun getArrayTypeLength(type: ResolvedType) {
-        if (type is ArrayResolvedType) {
+        if (type is ReferenceResolvedType) {
+            getArrayTypeLength(type.inner)
+        } else if (type is ArrayResolvedType) {
+            getArrayTypeLength(type.elementType)
             type.lengthExpr.accept(this)
             val length = evaluate(type.lengthExpr)
             if (length is Int) {
@@ -1686,8 +1888,6 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
                     )
                 }
                 visitBlockExpr(node.body, createScope = false)
-                if (functionSymbol.returnType != UnitResolvedType && !node.body.isBottom)
-                    throw SemanticException("no return in function '$fnName'")
             }
         }
         scopeTree.currentScope = previousScope // 还原scope状态
@@ -2586,7 +2786,7 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
 
                     is StructSymbol -> {
                         if (secondSegment == null) {
-                            throw SemanticException("cannot resolve path '$path'")
+                            return symbol
                         } else {
                             val secondName = secondSegment.value
                             return symbol.constants[secondName]
@@ -2703,7 +2903,22 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
     override fun visitFunctionItem(node: FunctionItemNode) {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!!
-        if (node.body != null) visitBlockExpr(node.body, createScope = false)
+        val fnName = node.fnName.value
+        val functionSymbol = scopeTree.lookup(fnName)
+        if (functionSymbol == null || functionSymbol !is FunctionSymbol) {
+            throw SemanticException("missing FunctionSymbol")
+        } else {
+            if (node.body != null) {
+                visitBlockExpr(node.body, createScope = false)
+                if (!(typeCheck(functionSymbol.returnType, node.body.resolvedType)
+                            || node.body.isBottom)
+                ) throw SemanticException(
+                    "no return in function '$fnName'" +
+                            " or type mismatch: left'${functionSymbol.returnType}' " +
+                            "right'${node.body.resolvedType}'"
+                )
+            }
+        }
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
@@ -3223,8 +3438,9 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         val elementType = when (val baseType = node.base.resolvedType) {
             is ArrayResolvedType -> baseType.elementType
             is ReferenceResolvedType -> {
-                baseType.inner as? ArrayResolvedType
+                val inner = baseType.inner as? ArrayResolvedType
                     ?: throw SemanticException("Cannot index into type $baseType")
+                inner.elementType
             } // 自动解引用
 
             else -> throw SemanticException("Cannot index into type $baseType")
@@ -3256,7 +3472,7 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             if (!seenFields.add(fieldName)) throw SemanticException(
                 "Duplicate field '$fieldName' in struct '${symbol.name}' expression"
             )
-            if (typeCheck(fieldType, field.value.resolvedType)) {
+            if (!typeCheck(fieldType, field.value.resolvedType)) {
                 throw SemanticException("Type mismatch for field '$fieldName'")
             }
         }
@@ -3327,27 +3543,58 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
         node.receiver.accept(this)
 
-        val receiverType = node.receiver.resolvedType as? NamedResolvedType
-            ?: throw SemanticException("method receiver should be a struct")
-        val structSymbol = receiverType.symbol as? StructSymbol
-            ?: throw SemanticException("method receiver should be a struct")
-
+        node.exprType = ExprType.Value
         val methodName = node.method.segment.value
-        val method = structSymbol.methods[methodName]
-            ?: throw SemanticException("undefined method '$methodName'")
+        val receiverType = node.receiver.resolvedType
+        if (receiverType is NamedResolvedType) {
+            val structSymbol = receiverType.symbol as? StructSymbol
+                ?: throw SemanticException("method receiver should be a struct")
+            val method = structSymbol.methods[methodName]
+                ?: throw SemanticException("undefined method '$methodName'")
 
-        if (method.parameters.size != node.params.size) throw SemanticException(
-            "params number cannot match"
-        )
-        for (index in 0..<node.params.size) {
-            val param = node.params[index]
-            param.accept(this)
-            if (!typeCheck(method.parameters[index].paramType, param.resolvedType)) {
-                throw SemanticException("parameter type mismatch")
+            if (method.parameters.size != node.params.size) throw SemanticException(
+                "params number cannot match"
+            )
+            for (index in 0..<node.params.size) {
+                val param = node.params[index]
+                param.accept(this)
+                if (!typeCheck(method.parameters[index].paramType, param.resolvedType)) {
+                    throw SemanticException("parameter type mismatch")
+                }
+            }
+            node.resolvedType = method.returnType
+        } else {
+            // 内置method
+            when (receiverType) {
+                PrimitiveResolvedType("u32") if methodName == "to_string" -> {
+                    val symbol = scopeTree.lookup("String")
+                        ?: throw SemanticException("undefined struct 'String'")
+                    node.resolvedType = NamedResolvedType(name = symbol.name, symbol = symbol)
+                }
+
+                PrimitiveResolvedType("usize") if methodName == "to_string" -> {
+                    val symbol = scopeTree.lookup("String")
+                        ?: throw SemanticException("undefined struct 'String'")
+                    node.resolvedType = NamedResolvedType(name = symbol.name, symbol = symbol)
+                }
+
+                is ArrayResolvedType if methodName == "len" -> {
+                    node.resolvedType = PrimitiveResolvedType("usize")
+                }
+
+                is ReferenceResolvedType if receiverType.inner is ArrayResolvedType
+                        && methodName == "len"
+                    -> node.resolvedType = PrimitiveResolvedType("usize")
+
+                is ReferenceResolvedType if receiverType.inner == PrimitiveResolvedType("str")
+                        && methodName == "len"
+                    -> node.resolvedType = PrimitiveResolvedType("usize")
+
+                else -> throw SemanticException(
+                    "undefined method '$methodName' for type '$receiverType'"
+                )
             }
         }
-        node.exprType = ExprType.Value
-        node.resolvedType = method.returnType
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
