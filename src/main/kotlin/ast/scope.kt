@@ -32,8 +32,12 @@ data class FunctionSymbol(
     val returnType: ResolvedType,
     val isMethod: Boolean,
     val isAssociated: Boolean,
-    val isDefined: Boolean = true // 是否定义
-) : Symbol()
+    val isDefined: Boolean = true
+) : Symbol() {
+    override fun toString(): String {
+        return "FunctionSymbol(name='$name', returnType='${returnType.name}')"
+    }
+}
 
 data class ConstantSymbol(
     override val name: String,
@@ -46,11 +50,15 @@ data class ConstantSymbol(
 
 data class StructSymbol(
     override val name: String,
-    val fields: MutableMap<String, ResolvedType>, // fieldName to fieldType
+    val fields: MutableMap<String, ResolvedType>,
     val functions: MutableMap<String, FunctionSymbol> = mutableMapOf(),
     val methods: MutableMap<String, FunctionSymbol> = mutableMapOf(),
     val constants: MutableMap<String, ConstantSymbol> = mutableMapOf()
-) : Symbol()
+) : Symbol() {
+    override fun toString(): String {
+        return "StructSymbol(name='$name', fields=${fields.keys})"
+    }
+}
 
 data class EnumSymbol(
     override val name: String,

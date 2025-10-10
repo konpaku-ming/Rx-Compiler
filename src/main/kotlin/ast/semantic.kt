@@ -10,7 +10,12 @@ sealed interface ResolvedType {
 data class NamedResolvedType(
     override val name: String,
     var symbol: Symbol = UnknownSymbol() // 之后要链接到对应的Symbol
-) : ResolvedType
+) : ResolvedType {
+
+    override fun toString(): String {
+        return "NameResolvedType(name='$name')"
+    }
+}
 
 data class PrimitiveResolvedType(
     override val name: String
@@ -3305,7 +3310,8 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             node.resolvedType = UnitResolvedType // AssignExpr is always unitType
         } else throw SemanticException(
             "cannot assign to a immutable variable or type mismatch: " +
-                    "left:'$leftType' right:'$rightType'"
+                    "left:'$leftType' right:'$rightType'\n" +
+                    "assignee is '${node.left}'"
         )
 
         scopeTree.currentScope = previousScope // 还原scope状态
@@ -3568,58 +3574,84 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
 
         node.exprType = ExprType.Value
         val methodName = node.method.segment.value
-        val receiverType = node.receiver.resolvedType
-        if (receiverType is NamedResolvedType) {
-            val structSymbol = receiverType.symbol as? StructSymbol
-                ?: throw SemanticException("method receiver should be a struct")
-            val method = structSymbol.methods[methodName]
-                ?: throw SemanticException("undefined method '$methodName'")
+        when (val receiverType = node.receiver.resolvedType) {
+            is NamedResolvedType -> {
+                val structSymbol = receiverType.symbol as? StructSymbol
+                    ?: throw SemanticException("method receiver should be a struct")
+                val method = structSymbol.methods[methodName]
+                    ?: throw SemanticException("undefined method '$methodName'")
 
-            if (method.parameters.size != node.params.size) throw SemanticException(
-                "params number cannot match"
-            )
-            for (index in 0..<node.params.size) {
-                val param = node.params[index]
-                param.accept(this)
-                if (!typeCheck(method.parameters[index].paramType, param.resolvedType)) {
-                    throw SemanticException(
-                        "parameter '${method.parameters[index].name}' " +
-                                "type mismatch: left:'${method.parameters[index].paramType}' " +
-                                "right:'${param.resolvedType}'"
+                if (method.parameters.size != node.params.size) throw SemanticException(
+                    "params number cannot match"
+                )
+                for (index in 0..<node.params.size) {
+                    val param = node.params[index]
+                    param.accept(this)
+                    if (!typeCheck(method.parameters[index].paramType, param.resolvedType)) {
+                        throw SemanticException(
+                            "parameter '${method.parameters[index].name}' " +
+                                    "type mismatch: left:'${method.parameters[index].paramType}' " +
+                                    "right:'${param.resolvedType}'"
+                        )
+                    }
+                }
+                node.resolvedType = method.returnType
+            }
+
+            is ReferenceResolvedType if receiverType.inner is NamedResolvedType -> {
+                val structSymbol = receiverType.inner.symbol as? StructSymbol
+                    ?: throw SemanticException("method receiver should be a struct")
+                val method = structSymbol.methods[methodName]
+                    ?: throw SemanticException("undefined method '$methodName'")
+
+                if (method.parameters.size != node.params.size) throw SemanticException(
+                    "params number cannot match"
+                )
+                for (index in 0..<node.params.size) {
+                    val param = node.params[index]
+                    param.accept(this)
+                    if (!typeCheck(method.parameters[index].paramType, param.resolvedType)) {
+                        throw SemanticException(
+                            "parameter '${method.parameters[index].name}' " +
+                                    "type mismatch: left:'${method.parameters[index].paramType}' " +
+                                    "right:'${param.resolvedType}'"
+                        )
+                    }
+                }
+                node.resolvedType = method.returnType
+            }
+
+            else -> {
+                // 内置method
+                when (receiverType) {
+                    PrimitiveResolvedType("u32") if methodName == "to_string" -> {
+                        val symbol = scopeTree.lookup("String")
+                            ?: throw SemanticException("undefined struct 'String'")
+                        node.resolvedType = NamedResolvedType(name = symbol.name, symbol = symbol)
+                    }
+
+                    PrimitiveResolvedType("usize") if methodName == "to_string" -> {
+                        val symbol = scopeTree.lookup("String")
+                            ?: throw SemanticException("undefined struct 'String'")
+                        node.resolvedType = NamedResolvedType(name = symbol.name, symbol = symbol)
+                    }
+
+                    is ArrayResolvedType if methodName == "len" -> {
+                        node.resolvedType = PrimitiveResolvedType("usize")
+                    }
+
+                    is ReferenceResolvedType if receiverType.inner is ArrayResolvedType
+                            && methodName == "len"
+                        -> node.resolvedType = PrimitiveResolvedType("usize")
+
+                    is ReferenceResolvedType if receiverType.inner == PrimitiveResolvedType("str")
+                            && methodName == "len"
+                        -> node.resolvedType = PrimitiveResolvedType("usize")
+
+                    else -> throw SemanticException(
+                        "undefined method '$methodName' for type '$receiverType'"
                     )
                 }
-            }
-            node.resolvedType = method.returnType
-        } else {
-            // 内置method
-            when (receiverType) {
-                PrimitiveResolvedType("u32") if methodName == "to_string" -> {
-                    val symbol = scopeTree.lookup("String")
-                        ?: throw SemanticException("undefined struct 'String'")
-                    node.resolvedType = NamedResolvedType(name = symbol.name, symbol = symbol)
-                }
-
-                PrimitiveResolvedType("usize") if methodName == "to_string" -> {
-                    val symbol = scopeTree.lookup("String")
-                        ?: throw SemanticException("undefined struct 'String'")
-                    node.resolvedType = NamedResolvedType(name = symbol.name, symbol = symbol)
-                }
-
-                is ArrayResolvedType if methodName == "len" -> {
-                    node.resolvedType = PrimitiveResolvedType("usize")
-                }
-
-                is ReferenceResolvedType if receiverType.inner is ArrayResolvedType
-                        && methodName == "len"
-                    -> node.resolvedType = PrimitiveResolvedType("usize")
-
-                is ReferenceResolvedType if receiverType.inner == PrimitiveResolvedType("str")
-                        && methodName == "len"
-                    -> node.resolvedType = PrimitiveResolvedType("usize")
-
-                else -> throw SemanticException(
-                    "undefined method '$methodName' for type '$receiverType'"
-                )
             }
         }
 
@@ -3632,9 +3664,27 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         node.struct.accept(this)
 
         val receiverType = when (val structType = node.struct.resolvedType) {
-            is NamedResolvedType -> structType
-            is ReferenceResolvedType -> structType.inner as? NamedResolvedType
-                ?: throw SemanticException("the expr of FieldExpr must be a struct")
+            is NamedResolvedType -> {
+                node.exprType = when (node.struct.exprType) {
+                    ExprType.MutPlace -> ExprType.MutPlace
+                    ExprType.Place -> ExprType.Place
+                    ExprType.Value -> ExprType.MutPlace
+                    ExprType.Unknown -> throw SemanticException(
+                        "struct expr cannot be resolved"
+                    )
+                }
+                structType
+            }
+
+            is ReferenceResolvedType -> {
+                node.exprType = if (structType.isMut) {
+                    ExprType.MutPlace
+                } else {
+                    ExprType.Place
+                }
+                structType.inner as? NamedResolvedType
+                    ?: throw SemanticException("the expr of FieldExpr must be a struct")
+            }
 
             else -> throw SemanticException("the expr of FieldExpr must be a struct")
         }
@@ -3647,14 +3697,6 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             "Unknown field '$fieldName' in struct '${structSymbol.name}'"
         )
 
-        node.exprType = when (node.struct.exprType) {
-            ExprType.MutPlace -> ExprType.MutPlace
-            ExprType.Place -> ExprType.Place
-            ExprType.Value -> ExprType.MutPlace
-            ExprType.Unknown -> throw SemanticException(
-                "struct expr cannot be resolved"
-            )
-        }
         node.resolvedType = fieldType
 
         scopeTree.currentScope = previousScope // 还原scope状态
@@ -3700,7 +3742,7 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             targetScope = targetScope.parent!!
         }
         if (targetScope is LoopScope) {
-            if (targetScope.breakType == UnknownResolvedType) targetScope.breakType = breakType
+            if (targetScope.breakType is UnknownResolvedType) targetScope.breakType = breakType
             else targetScope.breakType = typeUnify(targetScope.breakType, breakType)
         } else throw SemanticException("break outside loop")
 
