@@ -3297,6 +3297,8 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         when (node.operator.type) {
             TokenType.SubNegate -> {
                 if (isSignedInt(type)) node.resolvedType = type
+                if (node.resolvedType == PrimitiveResolvedType("int"))
+                    node.resolvedType = PrimitiveResolvedType("signed int")
                 else throw SemanticException(
                     "Negation operator '-' requires signed int operands"
                 )
