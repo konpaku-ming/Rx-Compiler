@@ -3090,17 +3090,21 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
-        stringToInt(node.raw) // 超界时会抛出异常
         node.exprType = ExprType.Value
         node.resolvedType = if (node.raw.endsWith("i32")) {
+            stringToInt(node.raw.removeSuffix("i32")) // 超界时会抛出异常
             PrimitiveResolvedType("i32")
         } else if (node.raw.endsWith("u32")) {
+            stringToInt(node.raw.removeSuffix("u32")) // 超界时会抛出异常
             PrimitiveResolvedType("u32")
         } else if (node.raw.endsWith("isize")) {
+            stringToInt(node.raw.removeSuffix("isize")) // 超界时会抛出异常
             PrimitiveResolvedType("isize")
         } else if (node.raw.endsWith("usize")) {
+            stringToInt(node.raw.removeSuffix("usize")) // 超界时会抛出异常
             PrimitiveResolvedType("usize")
         } else {
+            stringToInt(node.raw) // 超界时会抛出异常
             PrimitiveResolvedType("int")
         }
 
@@ -3241,7 +3245,18 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
         if (node.operator.type == TokenType.SubNegate && node.expr is IntLiteralExprNode) {
-            val longValue = stringToLong(node.expr.raw)
+            val longValue = if (node.expr.raw.endsWith("i32")) {
+                stringToLong(node.expr.raw.removeSuffix("i32")) // 超界时会抛出异常
+            } else if (node.expr.raw.endsWith("u32")) {
+                stringToLong(node.expr.raw.removeSuffix("u32")) // 超界时会抛出异常
+            } else if (node.expr.raw.endsWith("isize")) {
+                stringToLong(node.expr.raw.removeSuffix("isize")) // 超界时会抛出异常
+            } else if (node.expr.raw.endsWith("usize")) {
+                stringToLong(node.expr.raw.removeSuffix("usize")) // 超界时会抛出异常
+            } else {
+                stringToLong(node.expr.raw) // 超界时会抛出异常
+            }
+
             if (longValue == 2147483648) {
                 // 特判 -2147483648 这种特殊情况
                 node.expr.resolvedType = PrimitiveResolvedType("signed int")
