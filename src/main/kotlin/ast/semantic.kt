@@ -1332,6 +1332,26 @@ fun stringToInt(str: String): Int {
     }
 }
 
+fun stringToLong(str: String): Long {
+    var tempStr = str.replace("_", "")
+    var base = 10
+    if (tempStr.startsWith("0b")) {
+        base = 2
+        tempStr = tempStr.substring(2)
+    } else if (tempStr.startsWith("0o")) {
+        base = 8
+        tempStr = tempStr.substring(2)
+    } else if (tempStr.startsWith("0x")) {
+        base = 16
+        tempStr = tempStr.substring(2)
+    }
+    return try {
+        tempStr.toLong(base)
+    } catch (_: NumberFormatException) {
+        throw SemanticException("Invalid long literal: '$str'")
+    }
+}
+
 fun stringToChar(str: String): Char {
     val content = str.substring(1, str.length - 1)
     return when {
@@ -2691,6 +2711,12 @@ fun typeCheck(left: ResolvedType, right: ResolvedType): Boolean {
             PrimitiveResolvedType("usize") -> true
             else -> false
         }
+    } else if (right == PrimitiveResolvedType("signed int")) {
+        when (left) {
+            PrimitiveResolvedType("i32") -> true
+            PrimitiveResolvedType("isize") -> true
+            else -> false
+        }
     } else if (left is ReferenceResolvedType && right is ReferenceResolvedType) {
         if (!typeCheck(left.inner, right.inner)) return false
         if (left.isMut == right.isMut) return true
@@ -2717,6 +2743,10 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         if (left == right) return left
         if (left == PrimitiveResolvedType("int")) return right
         if (right == PrimitiveResolvedType("int")) return left
+        if (left == PrimitiveResolvedType("signed int") && isSignedInt(right))
+            return right
+        if (right == PrimitiveResolvedType("signed int") && isSignedInt(left))
+            return left
         throw SemanticException("cannot +-*/ $left to $right")
     }
 
@@ -2725,6 +2755,10 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             if (left == right) return left
             if (left == PrimitiveResolvedType("int")) return right
             if (right == PrimitiveResolvedType("int")) return left
+            if (left == PrimitiveResolvedType("signed int") && isSignedInt(right))
+                return right
+            if (right == PrimitiveResolvedType("signed int") && isSignedInt(left))
+                return left
             throw SemanticException("cannot &|^ $left to $right")
         }
 
@@ -2746,6 +2780,10 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             return PrimitiveResolvedType("bool")
         if (isInt(left) && right == PrimitiveResolvedType("int"))
             return PrimitiveResolvedType("bool")
+        if (left == PrimitiveResolvedType("signed int") && isSignedInt(right))
+            return PrimitiveResolvedType("bool")
+        if (isSignedInt(left) && right == PrimitiveResolvedType("signed int"))
+            return PrimitiveResolvedType("bool")
 
         throw SemanticException("cannot compare $left with $right")
     }
@@ -2756,6 +2794,10 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         if (right == NeverResolvedType) return left
         if (left == PrimitiveResolvedType("int") && isInt(right)) return right
         if (right == PrimitiveResolvedType("int") && isInt(left)) return left
+        if (left == PrimitiveResolvedType("signed int") && isSignedInt(right))
+            return right
+        if (right == PrimitiveResolvedType("signed int") && isSignedInt(left))
+            return left
         throw SemanticException("$left does not match with $right")
     }
 
@@ -2765,6 +2807,7 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             PrimitiveResolvedType("u32"),
             PrimitiveResolvedType("isize"),
             PrimitiveResolvedType("usize"),
+            PrimitiveResolvedType("signed int"),
             PrimitiveResolvedType("int") -> true
 
             else -> false
@@ -2775,6 +2818,7 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         return when (resolvedType) {
             PrimitiveResolvedType("i32"),
             PrimitiveResolvedType("isize"),
+            PrimitiveResolvedType("signed int"),
             PrimitiveResolvedType("int") -> true
 
             else -> false
@@ -3046,6 +3090,7 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
+        stringToInt(node.raw) // 超界时会抛出异常
         node.exprType = ExprType.Value
         node.resolvedType = if (node.raw.endsWith("i32")) {
             PrimitiveResolvedType("i32")
@@ -3194,6 +3239,19 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
     override fun visitNegationExpr(node: NegationExprNode) {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
+
+        if (node.operator.type == TokenType.SubNegate && node.expr is IntLiteralExprNode) {
+            val longValue = stringToLong(node.expr.raw)
+            if (longValue == 2147483648) {
+                // 特判 -2147483648 这种特殊情况
+                node.expr.resolvedType = PrimitiveResolvedType("signed int")
+                node.exprType = ExprType.Value
+                node.resolvedType = PrimitiveResolvedType("signed int")
+                scopeTree.currentScope = previousScope // 还原scope状态
+                return
+            }
+        }
+
         node.expr.accept(this)
 
         node.exprType = ExprType.Value
@@ -3356,7 +3414,11 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             TokenType.DivAssign, TokenType.ModAssign -> {
                 if (isInt(leftType) && isInt(rightType) && (leftType == rightType
                             || leftType == PrimitiveResolvedType("int")
-                            || rightType == PrimitiveResolvedType("int"))
+                            || rightType == PrimitiveResolvedType("int")
+                            || (leftType == PrimitiveResolvedType("signed int")
+                            && isSignedInt(rightType))
+                            || (rightType == PrimitiveResolvedType("signed int") &&
+                            isSignedInt(leftType)))
                 ) node.resolvedType = UnitResolvedType
                 else throw SemanticException(
                     "operator '${node.operator}' requires numeric operands"
@@ -3366,7 +3428,11 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             TokenType.AndAssign, TokenType.OrAssign, TokenType.XorAssign -> {
                 if (isInt(leftType) && isInt(rightType) && (leftType == rightType
                             || leftType == PrimitiveResolvedType("int")
-                            || rightType == PrimitiveResolvedType("int"))
+                            || rightType == PrimitiveResolvedType("int")
+                            || (leftType == PrimitiveResolvedType("signed int")
+                            && isSignedInt(rightType))
+                            || (rightType == PrimitiveResolvedType("signed int") &&
+                            isSignedInt(leftType)))
                 ) node.resolvedType = UnitResolvedType
                 else if (leftType == PrimitiveResolvedType("bool")
                     && rightType == PrimitiveResolvedType("bool")
