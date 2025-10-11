@@ -362,17 +362,25 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
                 if (item.body == null) throw SemanticException(
                     "main function must have a body"
                 )
-                val exitStmt = item.body.statements.lastOrNull() ?: throw SemanticException(
-                    "main function must end with exit statement"
+                var hasExit = false
+                if (item.body.tailExpr != null) {
+                    val tail = item.body.tailExpr
+                    if (tail is CallExprNode
+                        && tail.func is PathExprNode
+                        && tail.func.first.segment.value == "exit"
+                    ) hasExit = true
+                }
+                if (item.body.statements.isNotEmpty()) {
+                    val lastStmt = item.body.statements.last()
+                    if (lastStmt is ExprStmtNode
+                        && lastStmt.expr is CallExprNode
+                        && lastStmt.expr.func is PathExprNode
+                        && lastStmt.expr.func.first.segment.value == "exit"
+                    ) hasExit = true
+                }
+                if (!hasExit) throw SemanticException(
+                    "main function must end with exit"
                 )
-                if (exitStmt !is ExprStmtNode
-                    || exitStmt.expr !is CallExprNode
-                    || exitStmt.expr.func !is PathExprNode
-                    || exitStmt.expr.func.first.segment.value != "exit"
-                ) throw SemanticException(
-                    "main function must end with exit statement"
-                )
-
             }
             item.accept(this)
         }
