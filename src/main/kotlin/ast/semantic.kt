@@ -2732,6 +2732,7 @@ fun typeCheck(left: ResolvedType, right: ResolvedType): Boolean {
             PrimitiveResolvedType("isize") -> true
             PrimitiveResolvedType("u32") -> true
             PrimitiveResolvedType("usize") -> true
+            PrimitiveResolvedType("signed int") -> true
             else -> false
         }
     } else if (right == PrimitiveResolvedType("signed int")) {
