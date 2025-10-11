@@ -3366,16 +3366,16 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             stringToUInt(node.raw.removeSuffix("u32"))
             PrimitiveResolvedType("u32")
         } else if (node.raw.endsWith("isize")) {
-            val value = stringToUInt(node.raw.removeSuffix("i32"))
+            val value = stringToUInt(node.raw.removeSuffix("isize"))
             if (value > 2147483647U) throw SemanticException(
                 "integer literal out of range for i32"
             )
             PrimitiveResolvedType("isize")
         } else if (node.raw.endsWith("usize")) {
-            stringToUInt(node.raw.removeSuffix("u32"))
+            stringToUInt(node.raw.removeSuffix("usize"))
             PrimitiveResolvedType("usize")
         } else {
-            val value = stringToUInt(node.raw.removeSuffix("i32"))
+            val value = stringToUInt(node.raw)
             if (value > 2147483647U) PrimitiveResolvedType("unsigned int")
             else PrimitiveResolvedType("int")
         }
