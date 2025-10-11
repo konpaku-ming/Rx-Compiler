@@ -1666,6 +1666,7 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             is BinaryExprNode -> evaluateBinary(expr)
             is PathExprNode -> evaluateConstPath(expr)
             is GroupedExprNode -> evaluateGrouped(expr)
+            is TypeCastExprNode -> evaluateTypeCast(expr)
             else -> throw SemanticException("non-const value in const context")
         }
     }
@@ -1805,6 +1806,38 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
 
     fun evaluateGrouped(expr: GroupedExprNode): Any {
         return evaluate(expr.inner)
+    }
+
+    fun evaluateTypeCast(expr: TypeCastExprNode): Any {
+        val value = evaluate(expr.expr)
+        return when (val targetType = resolveType(expr.targetType)) {
+            is PrimitiveResolvedType -> {
+                when (targetType.name) {
+                    "u32", "usize" -> {
+                        if (value is Int && value >= 0) value
+                        else throw SemanticException(
+                            "cannot cast $value to $targetType"
+                        )
+                    }
+
+                    "i32", "isize" -> value as? Int ?: throw SemanticException(
+                        "cannot cast $value to $targetType"
+                    )
+
+                    "bool" -> value as? Boolean ?: throw SemanticException(
+                        "cannot cast $value to $targetType"
+                    )
+
+                    "char" -> value as? Char ?: throw SemanticException(
+                        "cannot cast $value to $targetType"
+                    )
+
+                    else -> throw SemanticException("unsupported cast to $targetType")
+                }
+            }
+
+            else -> throw SemanticException("unsupported cast to $targetType")
+        }
     }
 
     fun getArrayTypeLength(type: ResolvedType) {
@@ -2786,6 +2819,7 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             is BinaryExprNode -> evaluateBinary(expr)
             is PathExprNode -> evaluateConstPath(expr)
             is GroupedExprNode -> evaluateGrouped(expr)
+            is TypeCastExprNode -> evaluateTypeCast(expr)
             else -> throw SemanticException("non-const value in const context")
         }
     }
@@ -2925,6 +2959,38 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
 
     fun evaluateGrouped(expr: GroupedExprNode): Any {
         return evaluate(expr.inner)
+    }
+
+    fun evaluateTypeCast(expr: TypeCastExprNode): Any {
+        val value = evaluate(expr.expr)
+        return when (val targetType = resolveType(expr.targetType)) {
+            is PrimitiveResolvedType -> {
+                when (targetType.name) {
+                    "u32", "usize" -> {
+                        if (value is Int && value >= 0) value
+                        else throw SemanticException(
+                            "cannot cast $value to $targetType"
+                        )
+                    }
+
+                    "i32", "isize" -> value as? Int ?: throw SemanticException(
+                        "cannot cast $value to $targetType"
+                    )
+
+                    "bool" -> value as? Boolean ?: throw SemanticException(
+                        "cannot cast $value to $targetType"
+                    )
+
+                    "char" -> value as? Char ?: throw SemanticException(
+                        "cannot cast $value to $targetType"
+                    )
+
+                    else -> throw SemanticException("unsupported cast to $targetType")
+                }
+            }
+
+            else -> throw SemanticException("unsupported cast to $targetType")
+        }
     }
 
     fun getArrayTypeLength(type: ResolvedType) {
@@ -3580,6 +3646,8 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         val rightType = node.right.resolvedType
         when (node.operator.type) {
             TokenType.Add, TokenType.SubNegate, TokenType.Mul, TokenType.Div, TokenType.Mod -> {
+                println("$node")
+                println()
                 node.resolvedType = typeAddSubMulDivMod(leftType, rightType)
             }
 
