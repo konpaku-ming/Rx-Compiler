@@ -1945,6 +1945,7 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
         node.condition.accept(this)
         visitBlockExpr(node.block, createScope = false)
+        if (node.block.isBottom) node.isBottom = true
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
@@ -1952,6 +1953,7 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
         visitBlockExpr(node.block, createScope = false)
+        if (node.block.isBottom) node.isBottom = true
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
@@ -3005,6 +3007,11 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
 
         node.exprType = ExprType.Value
         node.resolvedType = (node.block.scopePosition as LoopScope).breakType
+        if (node.resolvedType is UnknownResolvedType) {
+            // 不含break，只含return
+            node.resolvedType = NeverResolvedType
+            node.isBottom = true
+        }
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
