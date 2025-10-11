@@ -2976,7 +2976,8 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
 
                 else -> node.resolvedType = UnitResolvedType
             }
-        } // 确定类型
+        } else node.resolvedType = UnitResolvedType
+        // 确定类型
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }

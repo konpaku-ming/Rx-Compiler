@@ -21,7 +21,7 @@ class Lexer(input: String) {
             }
         }
         if (matchStr.isEmpty()) {
-            println("无法识别token : $code")
+            println("cannot resolve token : $code")
             exitProcess(1)
         } else {
             if (matchType != TokenType.WHITESPACE) vec.add(Token(matchType, matchStr))
