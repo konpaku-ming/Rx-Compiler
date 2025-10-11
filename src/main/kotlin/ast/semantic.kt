@@ -3068,7 +3068,10 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
         node.exprType = ExprType.Value
-        node.resolvedType = PrimitiveResolvedType("str")
+        node.resolvedType = ReferenceResolvedType(
+            inner = PrimitiveResolvedType("str"),
+            isMut = false
+        )
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
@@ -3088,7 +3091,10 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
         node.exprType = ExprType.Value
-        node.resolvedType = PrimitiveResolvedType("str")
+        node.resolvedType = ReferenceResolvedType(
+            inner = PrimitiveResolvedType("str"),
+            isMut = false
+        )
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
@@ -3098,7 +3104,10 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
         node.exprType = ExprType.Value
-        node.resolvedType = PrimitiveResolvedType("str")
+        node.resolvedType = ReferenceResolvedType(
+            inner = PrimitiveResolvedType("str"),
+            isMut = false
+        )
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
@@ -3108,7 +3117,10 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
         node.exprType = ExprType.Value
-        node.resolvedType = PrimitiveResolvedType("str")
+        node.resolvedType = ReferenceResolvedType(
+            inner = PrimitiveResolvedType("str"),
+            isMut = false
+        )
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
