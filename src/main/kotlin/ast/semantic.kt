@@ -2009,23 +2009,6 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
     override fun visitLetStmt(node: LetStmtNode) {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
-        val pattern = node.pattern
-        if (pattern is IdentifierPatternNode) {
-            val variable = VariableSymbol(
-                name = pattern.name.value,
-                type = resolveType(node.valueType),
-                isMut = pattern.isMut
-            )
-            node.variableResolvedType = variable.type // 记录解析的类型，方便类型检查
-            val symbol = scopeTree.lookup(variable.name)
-            if (symbol != null && symbol !is VariableSymbol) {
-                throw SemanticException("refutable pattern in local binding")
-            } else {
-                scopeTree.define(variable) // 注册local variable（可能造成遮蔽）
-            }
-        } else throw SemanticException(
-            "invalid parameter name: '$pattern'"
-        )
         node.value.accept(this)
         if (node.value.isBottom) node.isBottom = true
         scopeTree.currentScope = previousScope // 还原scope状态
@@ -2749,6 +2732,230 @@ fun typeCheck(left: ResolvedType, right: ResolvedType): Boolean {
 }
 
 class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
+    fun resolveType(node: TypeNode): ResolvedType {
+        when (node) {
+            is TypePathNode -> {
+                when (val name = node.path.segment.value) {
+                    "Self" -> {
+                        var targetScope = scopeTree.currentScope
+                        while (targetScope.kind != ScopeKind.Impl &&
+                            targetScope.kind != ScopeKind.Trait &&
+                            targetScope.parent != null
+                        ) {
+                            targetScope = targetScope.parent!!
+                        }
+                        when (targetScope) {
+                            is ImplScope -> {
+                                return targetScope.implType
+                            }
+
+                            is TraitScope -> {
+                                val name = targetScope.traitSymbol.name
+                                return NamedResolvedType(name, targetScope.traitSymbol)
+                                // trait的self类型
+                            }
+
+                            else -> throw SemanticException(
+                                "self should be in impl/trait scope"
+                            )
+                        }
+                    }
+
+                    "u32" -> return PrimitiveResolvedType("u32")
+                    "i32" -> return PrimitiveResolvedType("i32")
+                    "usize" -> return PrimitiveResolvedType("usize")
+                    "isize" -> return PrimitiveResolvedType("isize")
+                    "bool" -> return PrimitiveResolvedType("bool")
+                    "char" -> return PrimitiveResolvedType("char")
+                    "str" -> return PrimitiveResolvedType("str")
+                    else -> {
+                        val symbol = scopeTree.lookup(name)
+                            ?: throw SemanticException("undefined symbol: $name")
+                        return NamedResolvedType(name = name, symbol = symbol)
+                    }
+                }
+            }
+
+            is ReferenceTypeNode -> {
+                val inner = resolveType(node.inner)
+                return ReferenceResolvedType(inner, node.isMut)
+            }
+
+            is ArrayTypeNode -> {
+                val element = resolveType(node.elementType)
+                val arrayType = ArrayResolvedType(element, node.length)
+                getArrayTypeLength(arrayType)
+                return arrayType
+            }
+
+            is UnitTypeNode -> return UnitResolvedType
+        }
+    }
+
+    fun evaluate(expr: ExprNode): Any {
+        return when (expr) {
+            is LiteralExprNode -> evaluateLiteral(expr)
+            is NegationExprNode -> evaluateNegation(expr)
+            is BinaryExprNode -> evaluateBinary(expr)
+            is PathExprNode -> evaluateConstPath(expr)
+            is GroupedExprNode -> evaluateGrouped(expr)
+            else -> throw SemanticException("non-const value in const context")
+        }
+    }
+
+    fun evaluateLiteral(expr: LiteralExprNode): Any {
+        return when (expr) {
+            is IntLiteralExprNode -> stringToInt(expr.raw)
+            is CharLiteralExprNode -> stringToChar(expr.raw)
+            is BooleanLiteralExprNode -> {
+                if (expr.raw == "true") true
+                else if (expr.raw == "false") false
+                else throw SemanticException("invalid bool '${expr.raw}'")
+            }
+
+            is StringLiteralExprNode -> stringToString(expr.raw)
+            is RawStringLiteralExprNode -> rawStringToString(expr.raw)
+            is CStringLiteralExprNode -> cStringToString(expr.raw)
+            is RawCStringLiteralExprNode -> rawCStringToString(expr.raw)
+        }
+    }
+
+    fun evaluateNegation(expr: NegationExprNode): Any {
+        val operandValue = evaluate(expr.expr) // 递归求值
+        return when (expr.operator.type) {
+            TokenType.SubNegate -> {
+                if (operandValue is Int) -operandValue
+                else throw SemanticException(
+                    "Unary '-' applied to non-integer constant: $operandValue"
+                )
+            }
+
+            TokenType.Not -> {
+                if (operandValue is Boolean) !operandValue
+                else throw SemanticException(
+                    "Unary '!' applied to non-boolean constant: $operandValue"
+                )
+            }
+
+            else -> throw SemanticException(
+                "Unknown unary operator: '${expr.operator.value}'"
+            )
+        }
+    }
+
+    fun evaluateBinary(expr: BinaryExprNode): Any {
+        val left = evaluate(expr.left)
+        val right = evaluate(expr.right)
+        val op = expr.operator.value
+
+        return when (expr.operator.type) {
+            TokenType.Add -> {
+                if (left is Int && right is Int) left + right
+                else throw SemanticException(
+                    "Type mismatch for operator '$op': left=${left}, right=${right}"
+                )
+            }
+
+            TokenType.SubNegate -> {
+                if (left is Int && right is Int) left - right
+                else throw SemanticException(
+                    "Type mismatch for operator '$op': left=${left}, right=${right}"
+                )
+            }
+
+            TokenType.Mul -> {
+                if (left is Int && right is Int) left * right
+                else throw SemanticException(
+                    "Type mismatch for operator '$op': left=${left}, right=${right}"
+                )
+            }
+
+            TokenType.Div -> {
+                if (left is Int && right is Int) left / right
+                else throw SemanticException(
+                    "Type mismatch for operator '$op': left=${left}, right=${right}"
+                )
+            }
+
+            TokenType.Mod -> {
+                if (left is Int && right is Int) left % right
+                else throw SemanticException(
+                    "Type mismatch for operator '$op': left=${left}, right=${right}"
+                )
+            }
+
+            TokenType.BitAnd -> {
+                if (left is Int && right is Int) left and right
+                else throw SemanticException(
+                    "Type mismatch for operator '$op': left=${left}, right=${right}"
+                )
+            }
+
+            TokenType.BitOr -> {
+                if (left is Int && right is Int) left or right
+                else throw SemanticException(
+                    "Type mismatch for operator '$op': left=${left}, right=${right}"
+                )
+            }
+
+            TokenType.BitXor -> {
+                if (left is Int && right is Int) left xor right
+                else throw SemanticException(
+                    "Type mismatch for operator '$op': left=${left}, right=${right}"
+                )
+            }
+
+            TokenType.Shl -> {
+                if (left is Int && right is Int) left shl right
+                else throw SemanticException(
+                    "Type mismatch for operator '$op': left=${left}, right=${right}"
+                )
+            }
+
+            TokenType.Shr -> {
+                if (left is Int && right is Int) left shr right
+                else throw SemanticException(
+                    "Type mismatch for operator '$op': left=${left}, right=${right}"
+                )
+            }
+
+            else -> throw SemanticException(
+                "Unsupported binary operator: '${expr.operator.value}'"
+            )
+        }
+    }
+
+    fun evaluateConstPath(expr: PathExprNode): Any {
+        val symbol = resolvePath(path = expr)
+        if (symbol !is ConstantSymbol) throw SemanticException(
+            "Path does not refer to a constant: '${expr}'"
+        )
+        if (symbol.value == null && symbol.valueExpr != null) {
+            symbol.value = evaluate(symbol.valueExpr) // 递归求值
+        }
+        return symbol.value ?: throw SemanticException("missing value")
+    }
+
+    fun evaluateGrouped(expr: GroupedExprNode): Any {
+        return evaluate(expr.inner)
+    }
+
+    fun getArrayTypeLength(type: ResolvedType) {
+        if (type is ReferenceResolvedType) {
+            getArrayTypeLength(type.inner)
+        } else if (type is ArrayResolvedType) {
+            getArrayTypeLength(type.elementType)
+            type.lengthExpr.accept(this)
+            val length = evaluate(type.lengthExpr)
+            if (length is Int) {
+                type.length = length
+                type.name = "[${type.elementType.name};${length}]" // 改名
+            } else {
+                throw SemanticException("array length is not Int")
+            }
+        } // const context求值
+    }
+
     fun isAssignee(expr: ExprNode): Boolean {
         if (expr.exprType == ExprType.MutPlace) return true
         else if (expr is StructExprNode) {
@@ -3093,6 +3300,25 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
     override fun visitLetStmt(node: LetStmtNode) {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
+
+        val pattern = node.pattern
+        if (pattern is IdentifierPatternNode) {
+            val variable = VariableSymbol(
+                name = pattern.name.value,
+                type = resolveType(node.valueType),
+                isMut = pattern.isMut
+            )
+            node.variableResolvedType = variable.type // 记录解析的类型，方便类型检查
+            val symbol = scopeTree.lookup(variable.name)
+            if (symbol != null && symbol !is VariableSymbol) {
+                throw SemanticException("refutable pattern in local binding")
+            } else {
+                scopeTree.define(variable) // 注册local variable（可能造成遮蔽）
+            }
+        } else throw SemanticException(
+            "invalid parameter name: '$pattern'"
+        )
+
         node.value.accept(this)
         if (!typeCheck(node.variableResolvedType, node.value.resolvedType)) {
             throw SemanticException(
@@ -3447,7 +3673,7 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         val leftType = node.left.resolvedType
         val rightType = node.right.resolvedType
         if (node.left.exprType != ExprType.MutPlace) throw SemanticException(
-            "Cannot assign '${node.right}' to '${node.left}'"
+            "Cannot assign '${node.right}' to '${node.left}'\n in $node"
         )
 
         when (node.operator.type) {
