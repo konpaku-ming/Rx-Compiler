@@ -134,7 +134,7 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
 
     override fun visitCrate(node: CrateNode) {
         var hasMain = false
-        println("visiting Crate")
+        // println("visiting Crate")
         node.scopePosition = scopeTree.currentScope
 
         // 添加builtin
@@ -176,7 +176,7 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         scopeTree.define(printFunction)
 
         val printlnFunction = FunctionSymbol(
-            name = "println",
+            name = "// println",
             selfParameter = null,
             parameters = listOf(
                 Parameter(
@@ -366,7 +366,7 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
     }
 
     override fun visitStructItem(node: StructItemNode) {
-        println("visiting StructItem")
+        // println("visiting StructItem")
         node.scopePosition = scopeTree.currentScope
         val structName = node.structName.value
         if (scopeTree.lookup(structName) != null) {
@@ -393,7 +393,7 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
     }
 
     override fun visitConstantItem(node: ConstantItemNode) {
-        println("visiting ConstantItem")
+        // println("visiting ConstantItem")
         node.scopePosition = scopeTree.currentScope
         val constName = node.constantName.value
         var targetScope = scopeTree.currentScope
@@ -452,7 +452,7 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
     }
 
     override fun visitEnumItem(node: EnumItemNode) {
-        println("visiting EnumItem")
+        // println("visiting EnumItem")
         node.scopePosition = scopeTree.currentScope
         val enumName = node.enumName.value
         if (scopeTree.lookup(enumName) != null) {
@@ -477,7 +477,7 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
     }
 
     override fun visitTraitItem(node: TraitItemNode) {
-        println("visiting TraitItem")
+        // println("visiting TraitItem")
         node.scopePosition = scopeTree.currentScope
         val traitName = node.traitName.value
         if (scopeTree.lookup(traitName) != null) {
@@ -493,7 +493,7 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
     }
 
     override fun visitImplItem(node: ImplItemNode) {
-        println("visiting ImplItem")
+        // println("visiting ImplItem")
         node.scopePosition = scopeTree.currentScope
         val implType = resolveType(node.implType)
         val traitName = node.traitName?.value
@@ -506,7 +506,7 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
     }
 
     override fun visitFunctionItem(node: FunctionItemNode) {
-        println("visiting FunctionItem")
+        // println("visiting FunctionItem")
         node.scopePosition = scopeTree.currentScope
         val fnName = node.fnName.value
         var targetScope = scopeTree.currentScope
@@ -636,7 +636,7 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
     }
 
     override fun visitBlockExpr(node: BlockExprNode, createScope: Boolean) {
-        println("visiting BlockExpr")
+        // println("visiting BlockExpr")
         node.scopePosition = scopeTree.currentScope
         if (createScope) scopeTree.enterBlockScope()
 
@@ -667,7 +667,7 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
     }
 
     override fun visitPredicateLoopExpr(node: PredicateLoopExprNode) {
-        println("visiting PredicateLoopExpr")
+        // println("visiting PredicateLoopExpr")
         node.scopePosition = scopeTree.currentScope
         node.condition.accept(this)
         scopeTree.enterLoopScope(breakType = UnitResolvedType) // while只能为unit
@@ -676,7 +676,7 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
     }
 
     override fun visitInfiniteLoopExpr(node: InfiniteLoopExprNode) {
-        println("visiting InfiniteLoopExpr")
+        // println("visiting InfiniteLoopExpr")
         node.scopePosition = scopeTree.currentScope
         scopeTree.enterLoopScope(breakType = UnknownResolvedType) // Loop的类型由break来确定
         visitBlockExpr(node.block, createScope = false)
@@ -684,130 +684,130 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
     }
 
     override fun visitEmptyStmt(node: EmptyStmtNode) {
-        println("visiting EmptyStmt")
+        // println("visiting EmptyStmt")
         node.scopePosition = scopeTree.currentScope
     }
 
     override fun visitLetStmt(node: LetStmtNode) {
-        println("visiting LetStmt")
+        // println("visiting LetStmt")
         node.scopePosition = scopeTree.currentScope
         resolveType(node.valueType)
         node.value.accept(this)
     }
 
     override fun visitExprStmt(node: ExprStmtNode) {
-        println("visiting ExprStmt")
+        // println("visiting ExprStmt")
         node.scopePosition = scopeTree.currentScope
         node.expr.accept(this)
     }
 
     override fun visitIntLiteralExpr(node: IntLiteralExprNode) {
-        println("visiting IntLiteralExpr")
+        // println("visiting IntLiteralExpr")
         node.scopePosition = scopeTree.currentScope
     }
 
     override fun visitCharLiteralExpr(node: CharLiteralExprNode) {
-        println("visiting CharLiteralExpr")
+        // println("visiting CharLiteralExpr")
         node.scopePosition = scopeTree.currentScope
     }
 
     override fun visitStringLiteralExpr(node: StringLiteralExprNode) {
-        println("visiting StringLiteralExpr")
+        // println("visiting StringLiteralExpr")
         node.scopePosition = scopeTree.currentScope
     }
 
     override fun visitBooleanLiteralExpr(node: BooleanLiteralExprNode) {
-        println("visiting BooleanLiteralExpr")
+        // println("visiting BooleanLiteralExpr")
         node.scopePosition = scopeTree.currentScope
     }
 
     override fun visitCStringLiteralExpr(node: CStringLiteralExprNode) {
-        println("visiting CStringLiteralExpr")
+        // println("visiting CStringLiteralExpr")
         node.scopePosition = scopeTree.currentScope
     }
 
     override fun visitRawStringLiteralExpr(node: RawStringLiteralExprNode) {
-        println("visiting RawStringLiteralExpr")
+        // println("visiting RawStringLiteralExpr")
         node.scopePosition = scopeTree.currentScope
     }
 
     override fun visitRawCStringLiteralExpr(node: RawCStringLiteralExprNode) {
-        println("visiting RawCStringLiteralExpr")
+        // println("visiting RawCStringLiteralExpr")
         node.scopePosition = scopeTree.currentScope
     }
 
     override fun visitPathExpr(node: PathExprNode) {
-        println("visiting PathExpr")
+        // println("visiting PathExpr")
         node.scopePosition = scopeTree.currentScope
     }
 
     override fun visitBorrowExpr(node: BorrowExprNode) {
-        println("visiting BorrowExpr")
+        // println("visiting BorrowExpr")
         node.scopePosition = scopeTree.currentScope
         node.expr.accept(this)
     }
 
     override fun visitDerefExpr(node: DerefExprNode) {
-        println("visiting DerefExpr")
+        // println("visiting DerefExpr")
         node.scopePosition = scopeTree.currentScope
         node.expr.accept(this)
     }
 
     override fun visitNegationExpr(node: NegationExprNode) {
-        println("visiting NegationExpr")
+        // println("visiting NegationExpr")
         node.scopePosition = scopeTree.currentScope
         node.expr.accept(this)
     }
 
     override fun visitBinaryExpr(node: BinaryExprNode) {
-        println("visiting BinaryExpr")
+        // println("visiting BinaryExpr")
         node.scopePosition = scopeTree.currentScope
         node.left.accept(this)
         node.right.accept(this)
     }
 
     override fun visitComparisonExpr(node: ComparisonExprNode) {
-        println("visiting ComparisonExpr")
+        // println("visiting ComparisonExpr")
         node.scopePosition = scopeTree.currentScope
         node.left.accept(this)
         node.right.accept(this)
     }
 
     override fun visitLazyBooleanExpr(node: LazyBooleanExprNode) {
-        println("visiting LazyBooleanExpr")
+        // println("visiting LazyBooleanExpr")
         node.scopePosition = scopeTree.currentScope
         node.left.accept(this)
         node.right.accept(this)
     }
 
     override fun visitTypeCastExpr(node: TypeCastExprNode) {
-        println("visiting TypeCastExpr")
+        // println("visiting TypeCastExpr")
         node.scopePosition = scopeTree.currentScope
         node.expr.accept(this)
     }
 
     override fun visitAssignExpr(node: AssignExprNode) {
-        println("visiting AssignExpr")
+        // println("visiting AssignExpr")
         node.scopePosition = scopeTree.currentScope
         node.left.accept(this)
         node.right.accept(this)
     }
 
     override fun visitCompoundAssignExpr(node: CompoundAssignExprNode) {
-        println("visiting CompoundAssignExpr")
+        // println("visiting CompoundAssignExpr")
         node.scopePosition = scopeTree.currentScope
         node.left.accept(this)
         node.right.accept(this)
     }
 
     override fun visitGroupedExpr(node: GroupedExprNode) {
-        println("visiting GroupedExpr")
+        // println("visiting GroupedExpr")
         node.scopePosition = scopeTree.currentScope
         node.inner.accept(this)
     }
 
     override fun visitArrayListExpr(node: ArrayListExprNode) {
-        println("visiting ArrayListExpr")
+        // println("visiting ArrayListExpr")
         node.scopePosition = scopeTree.currentScope
         for (element in node.elements) {
             element.accept(this)
@@ -815,21 +815,21 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
     }
 
     override fun visitArrayLengthExpr(node: ArrayLengthExprNode) {
-        println("visiting ArrayLengthExpr")
+        // println("visiting ArrayLengthExpr")
         node.scopePosition = scopeTree.currentScope
         node.element.accept(this)
         node.lengthExpr.accept(this)
     }
 
     override fun visitIndexExpr(node: IndexExprNode) {
-        println("visiting IndexExpr")
+        // println("visiting IndexExpr")
         node.scopePosition = scopeTree.currentScope
         node.base.accept(this)
         node.index.accept(this)
     }
 
     override fun visitStructExpr(node: StructExprNode) {
-        println("visiting StructExpr")
+        // println("visiting StructExpr")
         node.scopePosition = scopeTree.currentScope
         node.path.accept(this)
         for (field in node.fields) {
@@ -838,7 +838,7 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
     }
 
     override fun visitCallExpr(node: CallExprNode) {
-        println("visiting CallExpr")
+        // println("visiting CallExpr")
         node.scopePosition = scopeTree.currentScope
         node.func.accept(this)
         for (param in node.params) {
@@ -847,7 +847,7 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
     }
 
     override fun visitMethodCallExpr(node: MethodCallExprNode) {
-        println("visiting MethodCallExpr")
+        // println("visiting MethodCallExpr")
         node.scopePosition = scopeTree.currentScope
         node.receiver.accept(this)
         for (param in node.params) {
@@ -856,13 +856,13 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
     }
 
     override fun visitFieldExpr(node: FieldExprNode) {
-        println("visiting FieldExpr")
+        // println("visiting FieldExpr")
         node.scopePosition = scopeTree.currentScope
         node.struct.accept(this)
     }
 
     override fun visitIfExpr(node: IfExprNode) {
-        println("visiting IfExpr")
+        // println("visiting IfExpr")
         node.scopePosition = scopeTree.currentScope
         node.condition.accept(this)
         node.thenBranch.accept(this)
@@ -870,18 +870,18 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
     }
 
     override fun visitBreakExpr(node: BreakExprNode) {
-        println("visiting BreakExpr")
+        // println("visiting BreakExpr")
         node.scopePosition = scopeTree.currentScope
         node.value?.accept(this)
     }
 
     override fun visitContinueExpr(node: ContinueExprNode) {
-        println("visiting ContinueExpr")
+        // println("visiting ContinueExpr")
         node.scopePosition = scopeTree.currentScope
     }
 
     override fun visitReturnExpr(node: ReturnExprNode) {
-        println("visiting ReturnExpr")
+        // println("visiting ReturnExpr")
         node.scopePosition = scopeTree.currentScope
         node.value?.accept(this)
     }
