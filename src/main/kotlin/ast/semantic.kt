@@ -355,9 +355,10 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         for (item in node.items) {
             if (item is FunctionItemNode && item.fnName.value == "main") {
                 hasMain = true
-                if (item.returnType != null) throw SemanticException(
-                    "main function must return unit type"
-                )
+                if (item.returnType != null && item.returnType !is UnitTypeNode)
+                    throw SemanticException(
+                        "main function must return unit type"
+                    )
             }
             item.accept(this)
         }
