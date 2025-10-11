@@ -674,11 +674,12 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
                         "exit can only be used in the last statement of main"
                     )
                     val scope = node.scopePosition!!
-                    if (scope !is FunctionScope || scope.functionSymbol.name != "main") {
-                        throw SemanticException(
-                            "exit can only be used in the last statement of main"
-                        )
-                    }
+                    if (scope !is FunctionScope
+                        || scope.functionSymbol.name != "main"
+                        || scope.parent !is CrateScope
+                    ) throw SemanticException(
+                        "exit can only be used in the last statement of main"
+                    )
                 }
             }
             stmt.accept(this)
