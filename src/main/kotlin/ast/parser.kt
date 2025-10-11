@@ -294,7 +294,7 @@ class Parser(private val tokens: List<Token>) {
     }
 
     fun parseArrayType(cur: Token): TypeNode {
-        println("parsing ArrayType")
+        // println("parsing ArrayType")
         if (cur.type != TokenType.LeftBracket)
             throw SyntaxException("expected [")
         val elementType = parseType()
@@ -664,7 +664,7 @@ class Parser(private val tokens: List<Token>) {
     }
 
     fun parseArrayExpr(cur: Token): ArrayExprNode {
-        println("parsing ArrayExpr")
+        // println("parsing ArrayExpr")
         if (cur.type != TokenType.LeftBracket)
             throw SyntaxException("expected [")
         val element = mutableListOf<ExprNode>()

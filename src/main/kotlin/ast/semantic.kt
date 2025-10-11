@@ -176,7 +176,7 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         scopeTree.define(printFunction)
 
         val printlnFunction = FunctionSymbol(
-            name = "// println",
+            name = "println",
             selfParameter = null,
             parameters = listOf(
                 Parameter(
@@ -359,6 +359,20 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
                     throw SemanticException(
                         "main function must return unit type"
                     )
+                if (item.body == null) throw SemanticException(
+                    "main function must have a body"
+                )
+                val exitStmt = item.body.statements.lastOrNull() ?: throw SemanticException(
+                    "main function must end with exit statement"
+                )
+                if (exitStmt !is ExprStmtNode
+                    || exitStmt.expr !is CallExprNode
+                    || exitStmt.expr.func !is PathExprNode
+                    || exitStmt.expr.func.first.segment.value != "exit"
+                ) throw SemanticException(
+                    "main function must end with exit statement"
+                )
+
             }
             item.accept(this)
         }
@@ -3733,6 +3747,12 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
                     }
 
                     PrimitiveResolvedType("usize") if methodName == "to_string" -> {
+                        val symbol = scopeTree.lookup("String")
+                            ?: throw SemanticException("undefined struct 'String'")
+                        node.resolvedType = NamedResolvedType(name = symbol.name, symbol = symbol)
+                    }
+
+                    PrimitiveResolvedType("int") if methodName == "to_string" -> {
                         val symbol = scopeTree.lookup("String")
                             ?: throw SemanticException("undefined struct 'String'")
                         node.resolvedType = NamedResolvedType(name = symbol.name, symbol = symbol)
