@@ -19,9 +19,6 @@ enum class NodeType {
 
 sealed class ASTNode {
     abstract val type: NodeType
-    fun printNode() {
-        println("$type")
-    }
 
     var isBottom: Boolean = false // 标记是否会在所有分支上return
 }
@@ -30,11 +27,6 @@ data class CrateNode(
     val items: List<ItemNode>
 ) : ASTNode() {
     override val type: NodeType = NodeType.Crate
-
-    fun accept(visitor: ASTVisitor) {
-        visitor.visitCrate(this)
-    }
-
     var scopePosition: Scope? = null // 初始为null 第一次pass时记录处在哪个Scope中
 }
 
@@ -450,7 +442,7 @@ data class ArrayLengthExprNode(
         visitor.visitArrayLengthExpr(this)
     }
 
-    var length: Int = -1;
+    var length: Int = -1
 }
 
 data class IndexExprNode(

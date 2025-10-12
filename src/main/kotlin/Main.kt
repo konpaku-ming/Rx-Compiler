@@ -33,11 +33,6 @@ fun main(args: Array<String>) {
 
     try {
         val lexer = Lexer(removeComments(sourceCode))
-        /*
-        for (item in lexer.getTokens()) {
-            item.printToken()
-        }
-        */
         val parser = Parser(lexer.getTokens())
         val ast = parser.parse()
         val semanticScopeTree = ScopeTree()

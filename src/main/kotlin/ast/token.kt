@@ -23,11 +23,8 @@ enum class TokenType {
     SELF,
     SELF_CAP,
     STRUCT,
-    SUPER,
     TRAIT,
     TRUE,
-    USE,
-    WHERE,
     WHILE,
 
     IDENTIFIER,
@@ -101,11 +98,8 @@ val tokenPatterns: List<Pair<Regex, TokenType>> = listOf(
     Regex("^self") to TokenType.SELF,
     Regex("^Self") to TokenType.SELF_CAP,
     Regex("^struct") to TokenType.STRUCT,
-    Regex("^super") to TokenType.SUPER,
     Regex("^trait") to TokenType.TRAIT,
     Regex("^true") to TokenType.TRUE,
-    Regex("^use") to TokenType.USE,
-    Regex("^where") to TokenType.WHERE,
     Regex("^while") to TokenType.WHILE,
 
     Regex("^[a-zA-Z][a-zA-Z0-9_]*") to TokenType.IDENTIFIER,

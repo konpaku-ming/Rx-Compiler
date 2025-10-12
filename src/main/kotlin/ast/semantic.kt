@@ -1667,6 +1667,7 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             is PathExprNode -> evaluateConstPath(expr)
             is GroupedExprNode -> evaluateGrouped(expr)
             is TypeCastExprNode -> evaluateTypeCast(expr)
+            is ArrayListExprNode -> evaluateArrayList(expr)
             else -> throw SemanticException("non-const value in const context")
         }
     }
@@ -1854,6 +1855,14 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
                 throw SemanticException("array length is not Int")
             }
         } // const context求值
+    }
+
+    fun evaluateArrayList(expr: ArrayListExprNode): Any {
+        val arrayList: MutableList<Any> = mutableListOf()
+        for (element in expr.elements) {
+            arrayList.add(evaluate(element))
+        }
+        return arrayList
     }
 
     override fun visitCrate(node: CrateNode) {
@@ -2820,6 +2829,7 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             is PathExprNode -> evaluateConstPath(expr)
             is GroupedExprNode -> evaluateGrouped(expr)
             is TypeCastExprNode -> evaluateTypeCast(expr)
+            is ArrayListExprNode -> evaluateArrayList(expr)
             else -> throw SemanticException("non-const value in const context")
         }
     }
@@ -2991,6 +3001,14 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
 
             else -> throw SemanticException("unsupported cast to $targetType")
         }
+    }
+
+    fun evaluateArrayList(expr: ArrayListExprNode): Any {
+        val arrayList: MutableList<Any> = mutableListOf()
+        for (element in expr.elements) {
+            arrayList.add(evaluate(element))
+        }
+        return arrayList
     }
 
     fun getArrayTypeLength(type: ResolvedType) {
