@@ -3664,8 +3664,6 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         val rightType = node.right.resolvedType
         when (node.operator.type) {
             TokenType.Add, TokenType.SubNegate, TokenType.Mul, TokenType.Div, TokenType.Mod -> {
-                println("$node")
-                println()
                 node.resolvedType = typeAddSubMulDivMod(leftType, rightType)
             }
 
