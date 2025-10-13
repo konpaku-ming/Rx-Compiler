@@ -39,13 +39,13 @@ fun main(args: Array<String>) {
         val firstVisitor = FirstVisitor(semanticScopeTree)
         firstVisitor.visitCrate(node = ast) // 第一次pass
         val secondVisitor = SecondVisitor(semanticScopeTree)
-        secondVisitor.visitCrate(node = ast)
+        secondVisitor.visitCrate(node = ast) // 第二次pass
         val thirdVisitor = ThirdVisitor(semanticScopeTree)
-        thirdVisitor.visitCrate(node = ast)
+        thirdVisitor.visitCrate(node = ast) // 第三次pass
         val fourthVisitor = FourthVisitor(semanticScopeTree)
-        fourthVisitor.visitCrate(node = ast)
+        fourthVisitor.visitCrate(node = ast) // 第四次pass
         val fifthVisitor = FifthVisitor(semanticScopeTree)
-        fifthVisitor.visitCrate(node = ast)
+        fifthVisitor.visitCrate(node = ast) // 第五次pass
         println("success")
     } catch (e: CompilerException) {
         println("failed")

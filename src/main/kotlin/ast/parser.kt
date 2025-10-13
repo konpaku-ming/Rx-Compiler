@@ -131,6 +131,17 @@ class Parser(private val tokens: List<Token>) {
         }
     }
 
+    fun isExprStmt(): Boolean {
+        return when (peek().type) {
+            TokenType.LeftBrace,
+            TokenType.LOOP,
+            TokenType.WHILE,
+            TokenType.IF -> true
+
+            else -> false
+        }
+    }
+
     fun isItem(): Boolean {
         return when (peek().type) {
             TokenType.FN,
@@ -357,14 +368,26 @@ class Parser(private val tokens: List<Token>) {
             } else if (isStmt()) {
                 val stmt = parseStmt()
                 statements.add(stmt)
+            } else if (isExprStmt()) {
+                val blockExpr = when (peek().type) {
+                    TokenType.LeftBrace -> parseBlockExpr(consume())
+                    TokenType.IF -> parseIfExpr(consume())
+                    TokenType.LOOP -> parseInfiniteLoopExpr(consume())
+                    else -> parsePredicateLoopExpr(consume())
+                }
+                if (match(TokenType.Semicolon)) {
+                    statements.add(ExprStmtNode(blockExpr))
+                } else if (peek().type != TokenType.RightBrace) {
+                    statements.add(ExprStmtNode(blockExpr))
+                } else {
+                    tailExpr = blockExpr
+                }
             } else {
                 val expr = parseExpr(0)
                 if (match(TokenType.Semicolon)) {
                     statements.add(ExprStmtNode(expr))
                 } else if (peek().type != TokenType.RightBrace) {
-                    if (expr is ExprWithoutBlockNode)
-                        throw SyntaxException("ExprStmt must have block")
-                    statements.add(ExprStmtNode(expr))
+                    throw SyntaxException("ExprStmt must have block")
                 } else {
                     tailExpr = expr
                 }
