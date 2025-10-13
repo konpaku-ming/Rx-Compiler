@@ -48,7 +48,7 @@ fn main() {
     let node1: i32 = create_node(&mut pool, 10);
     let node2: i32 = create_node(&mut pool, 20);
     pool.nodes[node1 as usize].next = node2;
-
+    
     // Type error: trying to assign string to i32 field
     let invalid_node: Node = Node { value: 30, next: "not an i32" };
     traverse_list(&pool, node1);

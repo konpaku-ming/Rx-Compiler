@@ -169,6 +169,7 @@ fn performBooleanGridOperations(mut grid: [bool; 10000], pattern_count: &mut i32
         }
         row = row + 1;
     }
+
     *pattern_count = *pattern_count + operations;
 }
 

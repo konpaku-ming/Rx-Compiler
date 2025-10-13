@@ -4052,6 +4052,14 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
                 if (method.parameters.size != node.params.size) throw SemanticException(
                     "params number cannot match"
                 )
+                val methodSelf = method.selfParameter ?: throw SemanticException(
+                    "method '${method.name}' has no self parameter"
+                )
+                if (methodSelf.isMut && methodSelf.isRef && node.receiver.exprType == ExprType.Place) {
+                    throw SemanticException(
+                        "cannot call &mut self method on immutable value"
+                    )
+                }
                 for (index in 0..<node.params.size) {
                     val param = node.params[index]
                     param.accept(this)
@@ -4075,6 +4083,14 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
                 if (method.parameters.size != node.params.size) throw SemanticException(
                     "params number cannot match"
                 )
+                val methodSelf = method.selfParameter ?: throw SemanticException(
+                    "method '${method.name}' has no self parameter"
+                )
+                if (methodSelf.isMut && methodSelf.isRef && !receiverType.isMut) {
+                    throw SemanticException(
+                        "cannot call &mut self method on immutable reference"
+                    )
+                }
                 for (index in 0..<node.params.size) {
                     val param = node.params[index]
                     param.accept(this)
