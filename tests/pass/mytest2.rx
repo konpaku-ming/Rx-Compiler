@@ -1,0 +1,8 @@
+/*
+Test: Unit Test 2 - Array declaration and initialization
+*/
+fn main() {
+    let arr: [i32; 2] = [1, 2];
+    exit(0);
+}
+

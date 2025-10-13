@@ -1,0 +1,14 @@
+/*
+Test: Unit Test 18 - Nested struct
+*/
+struct Inner {
+    v: i32
+}
+struct Outer {
+    i: Inner
+}
+fn main() {
+    let o: Outer = Outer { i: Inner { v: 3 } };
+    let result: i32 = o.i.v;
+    exit(result);
+}

@@ -1,0 +1,10 @@
+/*
+Test: Unit Test 5 - while loop
+*/
+fn main() {
+    let mut i: i32 = 0;
+    while (i < 3) {
+        i = i + 1;
+    }
+    exit(i);
+}

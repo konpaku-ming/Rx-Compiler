@@ -1,0 +1,13 @@
+/*
+Test: Unit Test 4 - Conditional statement if-else
+*/
+fn main() {
+    let a: i32 = 5;
+    let result: i32 = 0;
+    if (a > 3) {
+        result = 1;
+    } else {
+        result = 0;
+    }
+    exit(result);
+}

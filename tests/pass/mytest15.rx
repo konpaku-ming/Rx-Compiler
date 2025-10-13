@@ -1,0 +1,13 @@
+/*
+Test: Unit Test 15 - Logical operation
+*/
+fn main() {
+    let a: bool = (true && false);
+    let mut result: i32 = 0;
+    if (a) {
+        result = 1;
+    } else {
+        result = 0;
+    }
+    exit(result);
+}

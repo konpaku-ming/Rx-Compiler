@@ -1,0 +1,7 @@
+/*
+Test: Unit Test 30 - Complex expression and precedence
+*/
+fn main() {
+    let a: i32 = 1 + 2 * 3 - 4 / 2;
+    exit(a);
+}

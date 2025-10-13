@@ -1,0 +1,8 @@
+/*
+Test: Unit Test 24 - Array Access
+*/
+fn main() {
+    let arr: [i32; 2] = [1, 2];
+    let result: i32 = arr[1];
+    exit(result);
+}

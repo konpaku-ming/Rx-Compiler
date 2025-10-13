@@ -1,0 +1,10 @@
+/*
+Test: Unit Test 7 - Function call
+*/
+fn add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+fn main() {
+    let c: i32 = add(2, 3);
+    exit(c);
+}

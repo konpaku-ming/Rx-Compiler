@@ -1,0 +1,8 @@
+/*
+Test: Unit Test 12 - Type conversion
+*/
+fn main() {
+    let a: i32 = 5;
+    let b: u32 = a as u32;
+    exit(b as i32);
+}

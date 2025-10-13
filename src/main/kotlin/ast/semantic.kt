@@ -666,6 +666,7 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             item.accept(this)
         }
         for (stmt in node.statements) {
+            stmt.accept(this)
             // 检查exit是否为main的最后一个statement
             if (stmt is ExprStmtNode && stmt.expr is CallExprNode && stmt.expr.func is PathExprNode) {
                 val fnName = stmt.expr.func.first.segment.value
@@ -673,7 +674,7 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
                     if (stmt != node.statements.last()) throw SemanticException(
                         "exit can only be used in the last statement of main"
                     )
-                    val scope = node.scopePosition!!
+                    val scope = stmt.scopePosition!!
                     if (scope !is FunctionScope
                         || scope.functionSymbol.name != "main"
                         || scope.parent !is CrateScope
@@ -682,7 +683,6 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
                     )
                 }
             }
-            stmt.accept(this)
         }
         node.tailExpr?.accept(this)
 

@@ -1,0 +1,7 @@
+/*
+Test: Unit Test 17 - Empty array
+*/
+fn main() {
+    let arr: [i32; 0] = [];
+    exit(0);
+}

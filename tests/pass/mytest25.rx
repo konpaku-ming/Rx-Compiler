@@ -1,0 +1,11 @@
+/*
+Test: Unit Test 25 - Struct array
+*/
+struct S {
+    v: i32
+}
+fn main() {
+    let arr: [S; 2] = [S { v: 1 }, S { v: 2 }];
+    let result: i32 = arr[1].v;
+    exit(result);
+}

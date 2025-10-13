@@ -1,0 +1,7 @@
+/*
+Test: Unit Test 27 - Type inference
+*/
+fn main() {
+    let a: i32 = 5;
+    exit(a);
+}

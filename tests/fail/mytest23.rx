@@ -1,0 +1,9 @@
+/*
+Test: Unit Test 23 - Pointer operation
+*/
+fn main() {
+    let mut a: i32 = 10;
+    let p: &i32 = &a;
+    *p = 20;
+    exit(a);
+}

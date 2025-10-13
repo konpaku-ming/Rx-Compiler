@@ -1,0 +1,12 @@
+/*
+Test: Unit Test 9 - Struct declaration and usage
+*/
+struct Point {
+    x: i32,
+    y: i32
+}
+fn main() {
+    let p: Point = Point { x: 1, y: 2 };
+    let result: i32 = p.x + p.y;
+    exit(result);
+}

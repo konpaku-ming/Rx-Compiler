@@ -1,0 +1,7 @@
+/*
+Test: Unit Test 1 - Main function and exit
+*/
+fn main() {
+    let code: i32 = 0;
+    exit(code);
+}

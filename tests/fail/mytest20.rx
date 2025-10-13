@@ -1,0 +1,8 @@
+/*
+Test: Unit Test 20 - Global variable
+*/
+let g: i32 = 10;
+fn main() {
+    let result: i32 = g;
+    exit(result);
+}

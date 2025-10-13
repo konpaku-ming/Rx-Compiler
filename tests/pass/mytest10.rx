@@ -1,0 +1,8 @@
+/*
+Test: Unit Test 10 - Pointer declaration and dereference
+*/
+fn main() {
+    let a: i32 = 5;
+    let p: &i32 = &a;
+    exit(*p);
+}

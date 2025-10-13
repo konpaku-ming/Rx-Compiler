@@ -1,0 +1,13 @@
+/*
+Test: Unit Test 19 - Recursive function
+*/
+fn fact(n: i32) -> i32 {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * fact(n - 1);
+}
+fn main() {
+    let result: i32 = fact(3);
+    exit(result);
+}

@@ -1,0 +1,11 @@
+/*
+Test: Unit Test 21 - Empty return value
+*/
+fn foo() {
+    // No return value
+}
+fn main() {
+    let code: i32 = 0;
+    foo();
+    exit(code);
+}

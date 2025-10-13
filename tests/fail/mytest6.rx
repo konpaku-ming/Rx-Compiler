@@ -1,0 +1,10 @@
+/*
+Test: Unit Test 6 - for loop
+*/
+fn main() {
+    let mut sum: i32 = 0;
+    for i in (0..3) {
+        sum = sum + i;
+    }
+    exit(sum);
+}

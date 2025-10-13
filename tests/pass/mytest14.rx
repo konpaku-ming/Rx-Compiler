@@ -1,0 +1,8 @@
+/*
+Test: Unit Test 14 - Empty statement block
+*/
+fn main() {
+    {}
+    let a: i32 = 0;
+    exit(0);
+}

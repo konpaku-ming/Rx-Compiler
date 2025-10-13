@@ -1,0 +1,10 @@
+/*
+Test: Unit Test 26 - Function overloading (error case)
+*/
+fn foo(a: i32) {}
+fn foo(a: f32) {}
+fn main() {
+    let code: i32 = 0;
+    foo(1);
+    exit(code);
+}

@@ -1,0 +1,8 @@
+/*
+Test: Unit Test 3 - Arithmetic expression
+*/
+fn main() {
+    let a: i32 = 1 + 2 * 3;
+    exit(a);
+}
+

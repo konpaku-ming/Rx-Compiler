@@ -1,0 +1,10 @@
+/*
+Test: Unit Test 13 - Return value test
+*/
+fn ret() -> i32 {
+    return 7;
+}
+fn main() {
+    let result: i32 = ret();
+    exit(result);
+}

@@ -1,0 +1,11 @@
+/*
+Test: Unit Test 22 - Nested scope
+*/
+fn main() {
+    let a: i32 = 1;
+    let b: i32 = 2;
+    if (b > a) {
+        exit(b);
+    }
+    exit(a);
+}
