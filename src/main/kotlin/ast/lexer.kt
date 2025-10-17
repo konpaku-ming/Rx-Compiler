@@ -1,7 +1,6 @@
 package ast
 
 import exception.SyntaxException
-import kotlin.system.exitProcess
 
 class Lexer(input: String) {
     var code = input

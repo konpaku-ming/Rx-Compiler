@@ -349,7 +349,7 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             isDefined = true
         )
         scopeTree.define(getIntFunction)
-        // TODO more builtin
+        // maybe more builtin
 
         // 依次visit每个item
         for (item in node.items) {
