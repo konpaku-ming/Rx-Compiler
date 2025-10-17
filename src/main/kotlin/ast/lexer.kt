@@ -1,5 +1,6 @@
 package ast
 
+import exception.SyntaxException
 import kotlin.system.exitProcess
 
 class Lexer(input: String) {
@@ -21,8 +22,7 @@ class Lexer(input: String) {
             }
         }
         if (matchStr.isEmpty()) {
-            println("cannot resolve token : $code")
-            exitProcess(1)
+            throw SyntaxException("cannot resolve token : $code")
         } else {
             if (matchType != TokenType.WHITESPACE) vec.add(Token(matchType, matchStr))
             return matchStr.length
