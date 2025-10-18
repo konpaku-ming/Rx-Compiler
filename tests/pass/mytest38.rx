@@ -1,0 +1,19 @@
+/*
+Test Package: Semantic-Extra
+Test Target: mytest38
+Author: assistant
+Time: 2025-10-18
+Verdict: Success
+Comment: if-else-if ladder
+*/
+
+fn main() {
+    if ((2 < 1)) {
+        print("no\n");
+    } else if ((2 == 2)) {
+        print("equal\n");
+    } else {
+        print("other\n");
+    }
+    exit(0);
+}

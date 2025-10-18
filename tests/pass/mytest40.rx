@@ -1,0 +1,15 @@
+/*
+Test Package: Semantic-Extra
+Test Target: mytest40
+Author: assistant
+Time: 2025-10-18
+Verdict: Success
+Comment: String concatenation and printing
+*/
+
+fn main() {
+    let s: &str = "foo";
+    let t: &str = "bar";
+    print(s);
+    exit(0);
+}

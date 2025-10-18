@@ -1,0 +1,15 @@
+/*
+Test Package: Semantic-Extra
+Test Target: mytest41
+Author: assistant
+Time: 2025-10-18
+Verdict: Success
+Comment: Mutability and reassignment
+*/
+
+fn main() {
+    let mut a: i32 = 5;
+    a = a * a;
+    printInt(a);
+    exit(0);
+}

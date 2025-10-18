@@ -1,0 +1,16 @@
+/*
+Test Package: Semantic-Extra
+Test Target: mytest46
+Author: assistant
+Time: 2025-10-18
+Verdict: Success
+Comment: Boolean flag test
+*/
+
+fn main() {
+    let flag: bool = true;
+    if ((flag)) {
+        print("ok\n");
+    }
+    exit(0);
+}

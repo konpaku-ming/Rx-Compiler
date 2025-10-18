@@ -1,0 +1,14 @@
+/*
+Test Package: Semantic-Extra
+Test Target: mytest44
+Author: assistant
+Time: 2025-10-18
+Verdict: Success
+Comment: Integer division behavior
+*/
+
+fn main() {
+    let x: i32 = 10 / 3;
+    printInt(x);
+    exit(0);
+}

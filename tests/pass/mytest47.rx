@@ -1,0 +1,18 @@
+/*
+Test Package: Semantic-Extra
+Test Target: mytest47
+Author: assistant
+Time: 2025-10-18
+Verdict: Success
+Comment: Scope shadowing and blocks
+*/
+
+fn main() {
+    let x: i32 = 1;
+    {
+        let x: &str = "ok";
+        print(x);
+    }
+    printInt(x);
+    exit(0);
+}

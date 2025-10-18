@@ -1,0 +1,16 @@
+/*
+Test Package: Semantic-Extra
+Test Target: mytest42
+Author: assistant
+Time: 2025-10-18
+Verdict: Success
+Comment: Array indexing
+*/
+
+fn main() {
+    let arr: [i32; 3] = [1, 2, 3];
+    printInt(arr[0]);
+    printInt(arr[1]);
+    printInt(arr[2]);
+    exit(0);
+}

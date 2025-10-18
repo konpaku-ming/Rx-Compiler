@@ -1,0 +1,17 @@
+/*
+Test Package: Semantic-Extra
+Test Target: mytest33
+Author: assistant
+Time: 2025-10-18
+Verdict: Success
+Comment: Basic arithmetic and precedence checks
+*/
+
+fn main() {
+    let a: i32 = 10;
+    let b: i32 = 5;
+    let c: i32 = a * (b + 2) - (a / b);
+    printInt(a - b);
+    printInt(c);
+    exit(0);
+}

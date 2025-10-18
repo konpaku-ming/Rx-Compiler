@@ -1,0 +1,14 @@
+/*
+Test Package: Semantic-Extra
+Test Target: mytest34
+Author: assistant
+Time: 2025-10-18
+Verdict: Success
+Comment: Expression evaluation with parentheses
+*/
+
+fn main() {
+    let x: i32 = 2 * (3 + 4);
+    printInt(x);
+    exit(0);
+}

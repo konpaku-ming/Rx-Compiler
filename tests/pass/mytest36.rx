@@ -1,0 +1,17 @@
+/*
+Test Package: Semantic-Extra
+Test Target: mytest36
+Author: assistant
+Time: 2025-10-18
+Verdict: Success
+Comment: Looping and printing sequence
+*/
+
+fn main() {
+    let mut i: i32 = 0;
+    while ((i < 5)) {
+        printInt(i);
+        i = i + 1;
+    }
+    exit(0);
+}

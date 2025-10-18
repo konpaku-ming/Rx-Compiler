@@ -1,0 +1,26 @@
+/*
+Test Package: Semantic-Extra
+Test Target: mytest31
+Author: assistant
+Time: 2025-10-18
+Verdict: Success
+Comment: Recursive Fibonacci calculation and basic prints; checks recursion and arithmetic
+*/
+
+fn fib(n: i32) -> i32 {
+    if ((n <= 1)) {
+        return n;
+    } else {
+        return fib(n - 1) + fib(n - 2);
+    }
+}
+
+fn main() {
+    let mut i: i32 = 0;
+    while (i <= 10) {
+        printInt(fib(i));
+        i = i + 1;
+    }
+    // final statement must be exit as required
+    exit(0);
+}

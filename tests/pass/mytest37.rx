@@ -1,0 +1,17 @@
+/*
+Test Package: Semantic-Extra
+Test Target: mytest37
+Author: assistant
+Time: 2025-10-18
+Verdict: Success
+Comment: Simple if-else branching with parentheses
+*/
+
+fn main() {
+    if ((1 < 2)) {
+        print("yes\n");
+    } else {
+        print("no\n");
+    }
+    exit(0);
+}

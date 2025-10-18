@@ -1,0 +1,24 @@
+/*
+Test Package: Semantic-Extra
+Test Target: mytest43
+Author: assistant
+Time: 2025-10-18
+Verdict: Success
+Comment: Sum function used by main; checks nested loops and returns
+*/
+
+fn sum(n: i32) -> i32 {
+    let mut s: i32 = 0;
+    let mut i: i32 = 1;
+    while ((i <= n)) {
+        s = s + i;
+        i = i + 1;
+    }
+    return s;
+}
+
+fn main() {
+    let v: i32 = sum(5);
+    printInt(v);
+    exit(0);
+}

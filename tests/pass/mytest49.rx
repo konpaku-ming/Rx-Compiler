@@ -1,0 +1,14 @@
+/*
+Test Package: Semantic-Extra
+Test Target: mytest49
+Author: assistant
+Time: 2025-10-18
+Verdict: Success
+Comment: Boolean expressions and logical operators
+*/
+
+fn main() {
+    printInt(((1 < 2) && (2 < 3)) as i32);
+    printInt(((1 > 2) || (2 == 2)) as i32);
+    exit(0);
+}

@@ -1,0 +1,21 @@
+/*
+Test Package: Semantic-Extra
+Test Target: mytest39
+Author: assistant
+Time: 2025-10-18
+Verdict: Success
+Comment: Recursive fib and printing a single value
+*/
+
+fn fib(n: i32) -> i32 {
+    if ((n <= 1)) {
+        return n;
+    }
+    return fib(n - 1) + fib(n - 2);
+}
+
+fn main() {
+    let r: i32 = fib(6);
+    printInt(r);
+    exit(0);
+}

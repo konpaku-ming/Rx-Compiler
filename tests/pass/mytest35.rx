@@ -1,0 +1,18 @@
+/*
+Test Package: Semantic-Extra
+Test Target: mytest35
+Author: assistant
+Time: 2025-10-18
+Verdict: Success
+Comment: Simple function call and return, argument passing
+*/
+
+fn add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+fn main() {
+    let s: i32 = add(7, 8);
+    printInt(s);
+    exit(0);
+}

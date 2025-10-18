@@ -1,0 +1,24 @@
+/*
+Test Package: Semantic-Extra
+Test Target: mytest48
+Author: assistant
+Time: 2025-10-18
+Verdict: Success
+Comment: Iterative factorial computation
+*/
+
+fn fact(n: i32) -> i32 {
+    let mut res: i32 = 1;
+    let mut i: i32 = 2;
+    while ((i <= n)) {
+        res = res * i;
+        i = i + 1;
+    }
+    return res;
+}
+
+fn main() {
+    let f: i32 = fact(6);
+    printInt(f);
+    exit(0);
+}
