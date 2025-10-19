@@ -4,10 +4,20 @@ Test Target: mytest50
 Author: assistant
 Time: 2025-10-18
 Verdict: Success
-Comment: Simple program printing Hello and exiting
+Comment: control flow with dead code
 */
 
 fn main() {
-    print("Hello\n");
+    let a: i32 = test4();
     exit(0);
+}
+
+fn test4() -> i32 {
+    if ({
+        return 1;
+        1
+    } == 1)
+    {
+        3;
+    };
 }

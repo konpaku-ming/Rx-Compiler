@@ -1989,19 +1989,20 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         for (item in node.items) {
             item.accept(this)
         }
+        var isReachable = true
         for (stmt in node.statements) {
             stmt.accept(this)
-        }
-        node.tailExpr?.accept(this)
-        // 控制流检查
-        if (node.tailExpr != null && node.tailExpr.isBottom) {
-            node.isBottom = true
-        } else if (node.statements.isNotEmpty()) {
-            val lastStatement = node.statements.last()
-            if (lastStatement.isBottom) {
-                node.isBottom = true
+            if (stmt.isBottom && isReachable) node.isBottom = true
+            if (stmt.isOut) {
+                node.isOut = true
+                isReachable = false
             }
         }
+        node.tailExpr?.accept(this)
+
+        // 控制流检查
+        if (node.tailExpr != null && node.tailExpr.isBottom && isReachable) node.isBottom = true
+        if (node.tailExpr != null && node.tailExpr.isOut) node.isOut = true
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
@@ -2010,7 +2011,10 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
         node.condition.accept(this)
         visitBlockExpr(node.block, createScope = false)
-        if (node.block.isBottom) node.isBottom = true
+        if (node.block.isBottom) {
+            node.isBottom = true
+            node.isOut = true
+        }
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
@@ -2018,7 +2022,10 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
         visitBlockExpr(node.block, createScope = false)
-        if (node.block.isBottom) node.isBottom = true
+        if (node.block.isBottom) {
+            node.isBottom = true
+            node.isOut = true
+        }
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
@@ -2033,6 +2040,7 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
         node.value.accept(this)
         if (node.value.isBottom) node.isBottom = true
+        if (node.value.isOut) node.isOut = true
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
@@ -2041,6 +2049,7 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
         node.expr.accept(this)
         if (node.expr.isBottom) node.isBottom = true
+        if (node.expr.isOut) node.isOut = true
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
@@ -2096,6 +2105,8 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
         node.expr.accept(this)
+        if (node.expr.isBottom) node.isBottom = true
+        if (node.expr.isOut) node.isOut = true
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
@@ -2103,6 +2114,8 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
         node.expr.accept(this)
+        if (node.expr.isBottom) node.isBottom = true
+        if (node.expr.isOut) node.isOut = true
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
@@ -2110,6 +2123,8 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
         node.expr.accept(this)
+        if (node.expr.isBottom) node.isBottom = true
+        if (node.expr.isOut) node.isOut = true
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
@@ -2118,6 +2133,10 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
         node.left.accept(this)
         node.right.accept(this)
+        if (node.left.isBottom) node.isBottom = true
+        if (node.left.isOut) node.isOut = true
+        if (node.right.isBottom) node.isBottom = true
+        if (node.right.isOut) node.isOut = true
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
@@ -2126,6 +2145,10 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
         node.left.accept(this)
         node.right.accept(this)
+        if (node.left.isBottom) node.isBottom = true
+        if (node.left.isOut) node.isOut = true
+        if (node.right.isBottom) node.isBottom = true
+        if (node.right.isOut) node.isOut = true
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
@@ -2134,6 +2157,10 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
         node.left.accept(this)
         node.right.accept(this)
+        if (node.left.isBottom) node.isBottom = true
+        if (node.left.isOut) node.isOut = true
+        if (node.right.isBottom) node.isBottom = true
+        if (node.right.isOut) node.isOut = true
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
@@ -2141,6 +2168,8 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
         node.expr.accept(this)
+        if (node.expr.isBottom) node.isBottom = true
+        if (node.expr.isOut) node.isOut = true
 
         node.targetResolvedType = resolveType(node.targetType) // 解析想要转成的类型
         getArrayTypeLength(node.targetResolvedType) // 可能求长度
@@ -2153,7 +2182,10 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
         node.left.accept(this)
         node.right.accept(this)
+        if (node.left.isBottom) node.isBottom = true
+        if (node.left.isOut) node.isOut = true
         if (node.right.isBottom) node.isBottom = true
+        if (node.right.isOut) node.isOut = true
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
@@ -2162,6 +2194,10 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
         node.left.accept(this)
         node.right.accept(this)
+        if (node.left.isBottom) node.isBottom = true
+        if (node.left.isOut) node.isOut = true
+        if (node.right.isBottom) node.isBottom = true
+        if (node.right.isOut) node.isOut = true
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
@@ -2170,6 +2206,7 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
         node.inner.accept(this)
         if (node.inner.isBottom) node.isBottom = true
+        if (node.inner.isOut) node.isOut = true
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
@@ -2246,8 +2283,13 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         node.condition.accept(this)
         node.thenBranch.accept(this)
         node.elseBranch?.accept(this)
+        if (node.condition.isBottom) node.isBottom = true
+        if (node.condition.isOut) node.isOut = true
         if (node.thenBranch.isBottom && node.elseBranch != null && node.elseBranch.isBottom) {
             node.isBottom = true // 每个分支都是bottom
+        }
+        if (node.thenBranch.isOut && node.elseBranch != null && node.elseBranch.isOut) {
+            node.isOut = true // 每个分支都是out
         }
         scopeTree.currentScope = previousScope // 还原scope状态
     }
@@ -2267,6 +2309,7 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         if (targetScope.kind != ScopeKind.Loop) {
             throw SemanticException("break outside loop")
         }
+        node.isOut = true
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
@@ -2285,6 +2328,7 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         if (targetScope.kind != ScopeKind.Loop) {
             throw SemanticException("continue outside loop")
         }
+        node.isOut = true
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
@@ -2303,6 +2347,7 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         }
 
         node.isBottom = true
+        node.isOut = true
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 }
@@ -3572,6 +3617,11 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             inner = node.expr.resolvedType,
             isMut = node.isMut
         )
+        if (node.isMut && node.expr.exprType == ExprType.Place) {
+            throw SemanticException(
+                "cannot borrow mutably an immutable value"
+            )
+        }
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
@@ -4055,10 +4105,20 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
                 val methodSelf = method.selfParameter ?: throw SemanticException(
                     "method '${method.name}' has no self parameter"
                 )
-                if (methodSelf.isMut && methodSelf.isRef && node.receiver.exprType == ExprType.Place) {
-                    throw SemanticException(
-                        "cannot call &mut self method on immutable value"
+                if (methodSelf.isRef) {
+                    val borrowNode = BorrowExprNode(isMut = methodSelf.isMut, expr = node.receiver)
+                    borrowNode.scopePosition = node.receiver.scopePosition
+                    node.receiver = borrowNode // 自动借用
+                    borrowNode.exprType = ExprType.Value
+                    borrowNode.resolvedType = ReferenceResolvedType(
+                        inner = borrowNode.expr.resolvedType,
+                        isMut = borrowNode.isMut
                     )
+                    if (borrowNode.isMut && borrowNode.expr.exprType == ExprType.Place) {
+                        throw SemanticException(
+                            "cannot borrow mutably an immutable value"
+                        )
+                    }
                 }
                 for (index in 0..<node.params.size) {
                     val param = node.params[index]
@@ -4109,18 +4169,84 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
                 // 内置method
                 when (receiverType) {
                     PrimitiveResolvedType("u32") if methodName == "to_string" -> {
+                        val borrowNode = BorrowExprNode(isMut = false, expr = node.receiver)
+                        borrowNode.scopePosition = node.receiver.scopePosition
+                        node.receiver = borrowNode // 自动借用
+                        borrowNode.exprType = ExprType.Value
+                        borrowNode.resolvedType = ReferenceResolvedType(
+                            inner = borrowNode.expr.resolvedType,
+                            isMut = borrowNode.isMut
+                        )
+                        val symbol = scopeTree.lookup("String")
+                            ?: throw SemanticException("undefined struct 'String'")
+                        node.resolvedType = NamedResolvedType(name = symbol.name, symbol = symbol)
+                    }
+
+                    is ReferenceResolvedType if receiverType.inner == PrimitiveResolvedType("u32")
+                            && methodName == "to_string" -> {
                         val symbol = scopeTree.lookup("String")
                             ?: throw SemanticException("undefined struct 'String'")
                         node.resolvedType = NamedResolvedType(name = symbol.name, symbol = symbol)
                     }
 
                     PrimitiveResolvedType("usize") if methodName == "to_string" -> {
+                        val borrowNode = BorrowExprNode(isMut = false, expr = node.receiver)
+                        borrowNode.scopePosition = node.receiver.scopePosition
+                        node.receiver = borrowNode // 自动借用
+                        borrowNode.exprType = ExprType.Value
+                        borrowNode.resolvedType = ReferenceResolvedType(
+                            inner = borrowNode.expr.resolvedType,
+                            isMut = borrowNode.isMut
+                        )
+                        val symbol = scopeTree.lookup("String")
+                            ?: throw SemanticException("undefined struct 'String'")
+                        node.resolvedType = NamedResolvedType(name = symbol.name, symbol = symbol)
+                    }
+
+                    is ReferenceResolvedType if receiverType.inner == PrimitiveResolvedType("usize")
+                            && methodName == "to_string" -> {
                         val symbol = scopeTree.lookup("String")
                             ?: throw SemanticException("undefined struct 'String'")
                         node.resolvedType = NamedResolvedType(name = symbol.name, symbol = symbol)
                     }
 
                     PrimitiveResolvedType("int") if methodName == "to_string" -> {
+                        val borrowNode = BorrowExprNode(isMut = false, expr = node.receiver)
+                        borrowNode.scopePosition = node.receiver.scopePosition
+                        node.receiver = borrowNode // 自动借用
+                        borrowNode.exprType = ExprType.Value
+                        borrowNode.resolvedType = ReferenceResolvedType(
+                            inner = borrowNode.expr.resolvedType,
+                            isMut = borrowNode.isMut
+                        )
+                        val symbol = scopeTree.lookup("String")
+                            ?: throw SemanticException("undefined struct 'String'")
+                        node.resolvedType = NamedResolvedType(name = symbol.name, symbol = symbol)
+                    }
+
+                    is ReferenceResolvedType if receiverType.inner == PrimitiveResolvedType("int")
+                            && methodName == "to_string" -> {
+                        val symbol = scopeTree.lookup("String")
+                            ?: throw SemanticException("undefined struct 'String'")
+                        node.resolvedType = NamedResolvedType(name = symbol.name, symbol = symbol)
+                    }
+
+                    PrimitiveResolvedType("unsigned int") if methodName == "to_string" -> {
+                        val borrowNode = BorrowExprNode(isMut = false, expr = node.receiver)
+                        borrowNode.scopePosition = node.receiver.scopePosition
+                        node.receiver = borrowNode // 自动借用
+                        borrowNode.exprType = ExprType.Value
+                        borrowNode.resolvedType = ReferenceResolvedType(
+                            inner = borrowNode.expr.resolvedType,
+                            isMut = borrowNode.isMut
+                        )
+                        val symbol = scopeTree.lookup("String")
+                            ?: throw SemanticException("undefined struct 'String'")
+                        node.resolvedType = NamedResolvedType(name = symbol.name, symbol = symbol)
+                    }
+
+                    is ReferenceResolvedType if receiverType.inner == PrimitiveResolvedType("unsigned int")
+                            && methodName == "to_string" -> {
                         val symbol = scopeTree.lookup("String")
                             ?: throw SemanticException("undefined struct 'String'")
                         node.resolvedType = NamedResolvedType(name = symbol.name, symbol = symbol)

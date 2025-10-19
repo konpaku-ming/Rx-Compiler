@@ -21,6 +21,7 @@ sealed class ASTNode {
     abstract val type: NodeType
 
     var isBottom: Boolean = false // 标记是否会在所有分支上return
+    var isOut: Boolean = false
 }
 
 data class CrateNode(
@@ -484,7 +485,7 @@ data class CallExprNode(
 }
 
 data class MethodCallExprNode(
-    val receiver: ExprNode,
+    var receiver: ExprNode,
     val method: PathSegment,
     val params: List<ExprNode>
 ) : ExprWithoutBlockNode() {
