@@ -1,0 +1,18 @@
+/*
+Verdict: Success
+*/
+
+fn main() {
+    let numbers: i32 = test();
+    exit(0);
+}
+
+fn test() -> i32 {
+    if ({
+        return 1;
+        1
+    } == 1)
+    {
+        3;
+    };
+}

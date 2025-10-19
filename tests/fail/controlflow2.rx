@@ -1,0 +1,15 @@
+/*
+Verdict: Failed
+*/
+
+fn main() {
+    let a: i32 = test();
+    exit(0);
+}
+
+fn test() -> i32 {
+    loop {
+        break;
+        return 1;
+    }
+}

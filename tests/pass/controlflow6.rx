@@ -1,0 +1,14 @@
+/*
+Verdict: Success
+*/
+
+fn main() {
+    let a: i32 = test();
+    exit(0);
+}
+
+fn test() -> i32 {
+    loop{
+        return 1;
+    };
+}
