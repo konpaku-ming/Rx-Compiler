@@ -1,6 +1,5 @@
 package ast
 
-
 interface ASTVisitor {
     // Crate
     fun visitCrate(node: CrateNode)

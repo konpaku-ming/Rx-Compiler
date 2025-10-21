@@ -1412,7 +1412,7 @@ fun stringToString(str: String): String {
     return builder.toString()
 }
 
-fun rawStringToString(str: String): String {
+fun stringToRawString(str: String): String {
     val hashCount = str.indexOf('"') - 1
     val prefix = "r" + "#".repeat(hashCount)
     val suffix = "\"${"#".repeat(hashCount)}"
@@ -1426,7 +1426,7 @@ fun rawStringToString(str: String): String {
     return str.substring(contentStart, contentEnd)
 }
 
-fun cStringToString(str: String): String {
+fun stringToCString(str: String): String {
     if (!str.startsWith("c\"") || !str.endsWith("\"")) {
         throw SemanticException("Invalid C string literal: '$str'")
     }
@@ -1472,7 +1472,7 @@ fun cStringToString(str: String): String {
     return builder.toString()
 }
 
-fun rawCStringToString(str: String): String {
+fun stringToRawCString(str: String): String {
     if (!str.startsWith("cr")) throw SemanticException(
         "Not a raw C string literal: $str"
     )
@@ -1683,9 +1683,9 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             }
 
             is StringLiteralExprNode -> stringToString(expr.raw)
-            is RawStringLiteralExprNode -> rawStringToString(expr.raw)
-            is CStringLiteralExprNode -> cStringToString(expr.raw)
-            is RawCStringLiteralExprNode -> rawCStringToString(expr.raw)
+            is RawStringLiteralExprNode -> stringToRawString(expr.raw)
+            is CStringLiteralExprNode -> stringToCString(expr.raw)
+            is RawCStringLiteralExprNode -> stringToRawCString(expr.raw)
         }
     }
 
@@ -2890,9 +2890,9 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             }
 
             is StringLiteralExprNode -> stringToString(expr.raw)
-            is RawStringLiteralExprNode -> rawStringToString(expr.raw)
-            is CStringLiteralExprNode -> cStringToString(expr.raw)
-            is RawCStringLiteralExprNode -> rawCStringToString(expr.raw)
+            is RawStringLiteralExprNode -> stringToRawString(expr.raw)
+            is CStringLiteralExprNode -> stringToCString(expr.raw)
+            is RawCStringLiteralExprNode -> stringToRawCString(expr.raw)
         }
     }
 
