@@ -609,7 +609,7 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
                             )
                         )
                     } else {
-                        error("duplicate parameter name: '$name'")
+                        throw SemanticException("duplicate parameter name: '$name'")
                     }
                 }
 
@@ -1655,7 +1655,7 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
                 }
             }
 
-            else -> error("cannot resolve path '$path'")
+            else -> throw SemanticException("cannot resolve path '$path'")
         }
     }
 
@@ -3299,7 +3299,7 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
                 }
             }
 
-            else -> error("cannot resolve path '$path'")
+            else -> throw SemanticException("cannot resolve path '$path'")
         }
     }
 
@@ -3601,7 +3601,7 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             is VariantSymbol -> symbol.type
             is FunctionSymbol -> UnknownResolvedType
             is StructSymbol -> UnknownResolvedType
-            else -> error("cannot resolve path expression")
+            else -> throw SemanticException("cannot resolve path expression")
         }
 
         scopeTree.currentScope = previousScope // 还原scope状态
@@ -3639,9 +3639,9 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             } else {
                 ExprType.Place
             }
-        } else {
-            error("Type '$type' cannot be dereferenced")
-        }
+        } else throw SemanticException(
+            "Type '$type' cannot be dereferenced"
+        )
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
