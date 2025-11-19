@@ -115,8 +115,7 @@ class Parser(private val tokens: List<Token>) {
             TokenType.WHILE,
             TokenType.BREAK,
             TokenType.CONTINUE,
-            TokenType.RETURN,
-            TokenType.MATCH -> true
+            TokenType.RETURN-> true
 
             else -> false
         }
