@@ -10,7 +10,8 @@ sealed class Symbol {
 data class VariableSymbol(
     override val name: String,
     val type: ResolvedType,
-    val isMut: Boolean
+    val isMut: Boolean,
+    var irAddress: String? = null  // IR中的地址，如 %x_addr
 ) : Symbol()
 
 data class SelfParameter(
@@ -32,7 +33,9 @@ data class FunctionSymbol(
     val returnType: ResolvedType,
     val isMethod: Boolean,
     val isAssociated: Boolean,
-    val isDefined: Boolean = true
+    val isDefined: Boolean = true,
+    var mangledName: String? = null,  // IR中的函数名，如 main_0
+    var irDefinition: String? = null  // 完整的LLVM函数定义
 ) : Symbol() {
     override fun toString(): String {
         return "FunctionSymbol(name='$name', returnType='${returnType.name}')"
@@ -45,7 +48,8 @@ data class ConstantSymbol(
     val valueExpr: ExprNode?,
     var value: Any?,
     val isAssociated: Boolean,
-    val isDefined: Boolean = true // 是否定义
+    val isDefined: Boolean = true, // 是否定义
+    var irValue: String? = null  // IR中的常量值
 ) : Symbol()
 
 data class StructSymbol(
