@@ -387,7 +387,62 @@ class LLVMIRGenerator(
     }
 
     override fun visitBinaryExpr(node: BinaryExprNode) {
-        TODO("Not yet implemented")
+        val previousScope = scopeTree.currentScope
+        scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
+        
+        // 访问左操作数并获取其结果
+        node.left.accept(this)
+        val leftValue = result
+        
+        // 访问右操作数并获取其结果
+        node.right.accept(this)
+        val rightValue = result
+        
+        // 获取操作数的LLVM类型
+        val resultType = getLLVMType(node.resolvedType)
+        
+        // 根据操作符类型生成对应的LLVM指令
+        val temp = emitter.newTemp()
+        when (node.operator.type) {
+            TokenType.Add -> {
+                emitter.emit("$temp = add $resultType $leftValue, $rightValue")
+            }
+            TokenType.SubNegate -> {
+                emitter.emit("$temp = sub $resultType $leftValue, $rightValue")
+            }
+            TokenType.Mul -> {
+                emitter.emit("$temp = mul $resultType $leftValue, $rightValue")
+            }
+            TokenType.Div -> {
+                // 使用sdiv进行有符号除法
+                emitter.emit("$temp = sdiv $resultType $leftValue, $rightValue")
+            }
+            TokenType.Mod -> {
+                // 使用srem进行有符号取模
+                emitter.emit("$temp = srem $resultType $leftValue, $rightValue")
+            }
+            TokenType.BitAnd -> {
+                emitter.emit("$temp = and $resultType $leftValue, $rightValue")
+            }
+            TokenType.BitOr -> {
+                emitter.emit("$temp = or $resultType $leftValue, $rightValue")
+            }
+            TokenType.BitXor -> {
+                emitter.emit("$temp = xor $resultType $leftValue, $rightValue")
+            }
+            TokenType.Shl -> {
+                emitter.emit("$temp = shl $resultType $leftValue, $rightValue")
+            }
+            TokenType.Shr -> {
+                // 使用ashr进行算术右移
+                emitter.emit("$temp = ashr $resultType $leftValue, $rightValue")
+            }
+            else -> throw IRException("Unsupported binary operator: ${node.operator}")
+        }
+        
+        result = temp
+        
+        scopeTree.currentScope = previousScope // 还原scope状态
     }
 
     override fun visitComparisonExpr(node: ComparisonExprNode) {
