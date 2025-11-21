@@ -388,20 +388,20 @@ class LLVMIRGenerator(
 
     override fun visitBinaryExpr(node: BinaryExprNode) {
         val previousScope = scopeTree.currentScope
-        scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
+        scopeTree.currentScope = node.scopePosition!! // Set current scope to node's scope position
         
-        // 访问左操作数并获取其结果
+        // Visit left operand and get its result
         node.left.accept(this)
         val leftValue = result
         
-        // 访问右操作数并获取其结果
+        // Visit right operand and get its result
         node.right.accept(this)
         val rightValue = result
         
-        // 获取操作数的LLVM类型
+        // Get LLVM type of operands
         val resultType = getLLVMType(node.resolvedType)
         
-        // 根据操作符类型生成对应的LLVM指令
+        // Generate corresponding LLVM instruction based on operator type
         val temp = emitter.newTemp()
         when (node.operator.type) {
             TokenType.Add -> {
@@ -414,11 +414,11 @@ class LLVMIRGenerator(
                 emitter.emit("$temp = mul $resultType $leftValue, $rightValue")
             }
             TokenType.Div -> {
-                // 使用sdiv进行有符号除法
+                // Use sdiv for signed division
                 emitter.emit("$temp = sdiv $resultType $leftValue, $rightValue")
             }
             TokenType.Mod -> {
-                // 使用srem进行有符号取模
+                // Use srem for signed remainder
                 emitter.emit("$temp = srem $resultType $leftValue, $rightValue")
             }
             TokenType.BitAnd -> {
@@ -434,7 +434,7 @@ class LLVMIRGenerator(
                 emitter.emit("$temp = shl $resultType $leftValue, $rightValue")
             }
             TokenType.Shr -> {
-                // 使用ashr进行算术右移
+                // Use ashr for arithmetic right shift
                 emitter.emit("$temp = ashr $resultType $leftValue, $rightValue")
             }
             else -> throw IRException("Unsupported binary operator: ${node.operator}")
@@ -442,7 +442,7 @@ class LLVMIRGenerator(
         
         result = temp
         
-        scopeTree.currentScope = previousScope // 还原scope状态
+        scopeTree.currentScope = previousScope // Restore previous scope state
     }
 
     override fun visitComparisonExpr(node: ComparisonExprNode) {
