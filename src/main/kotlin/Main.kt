@@ -7,6 +7,8 @@ import ast.FourthVisitor
 import ast.SecondVisitor
 import ast.ThirdVisitor
 import ast.removeComments
+import ir.LLVMEmitter
+import ir.LLVMIRGenerator
 import java.io.File
 import kotlin.system.exitProcess
 import exception.CompilerException
@@ -46,6 +48,19 @@ fun main(args: Array<String>) {
         fourthVisitor.visitCrate(node = ast) // 第四次pass
         val fifthVisitor = FifthVisitor(semanticScopeTree)
         fifthVisitor.visitCrate(node = ast) // 第五次pass
+
+/*
+        // 生成LLVM IR
+        println("\n--- generating IR ---")
+        val emitter = LLVMEmitter()
+        val irGenerator = LLVMIRGenerator(emitter, semanticScopeTree)
+        irGenerator.visitCrate(ast)
+
+        println("\n--- generated IR ---")
+        println(emitter.getIR())
+        println("-------------------")
+*/
+
         println("success")
     } catch (e: CompilerException) {
         println("failed")

@@ -2792,7 +2792,7 @@ fun typeCheck(left: ResolvedType, right: ResolvedType): Boolean {
             PrimitiveResolvedType("isize") -> true
             else -> false
         }
-    } else if (right == PrimitiveResolvedType("unsignedint")) {
+    } else if (right == PrimitiveResolvedType("unsigned int")) {
         when (left) {
             PrimitiveResolvedType("u32") -> true
             PrimitiveResolvedType("usize") -> true

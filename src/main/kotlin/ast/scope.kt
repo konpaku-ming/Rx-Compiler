@@ -11,7 +11,7 @@ data class VariableSymbol(
     override val name: String,
     val type: ResolvedType,
     val isMut: Boolean,
-    var irAddress: String? = null  // IR中的地址，如 %x_addr
+    var irAddress: String? = null  // IR中的地址，如 %x.1
 ) : Symbol()
 
 data class SelfParameter(
@@ -34,8 +34,6 @@ data class FunctionSymbol(
     val isMethod: Boolean,
     val isAssociated: Boolean,
     val isDefined: Boolean = true,
-    var mangledName: String? = null,  // IR中的函数名，如 main_0
-    var irDefinition: String? = null  // 完整的LLVM函数定义
 ) : Symbol() {
     override fun toString(): String {
         return "FunctionSymbol(name='$name', returnType='${returnType.name}')"

@@ -295,7 +295,8 @@ data class PathExprNode(
 data class BlockExprNode(
     val items: List<ItemNode>, // Block里的items
     val statements: List<StmtNode>, // 非items的语句
-    val tailExpr: ExprNode? // 尾表达式
+    val tailExpr: ExprNode?, // 尾表达式
+    var irAddress: String? = null // 地址，用于返回Block值
 ) : ExprWithBlockNode() {
     override val type: NodeType = NodeType.BlockExpr
 

@@ -9,3 +9,7 @@ data class SyntaxException(
 data class SemanticException(
     val originalMessage: String,
 ) : CompilerException("Semantic Error: $originalMessage")
+
+data class IRException(
+    val originalMessage: String,
+) : CompilerException("Generating IR Error: $originalMessage")
