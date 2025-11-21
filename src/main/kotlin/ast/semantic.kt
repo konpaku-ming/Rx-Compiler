@@ -2805,6 +2805,42 @@ fun typeCheck(left: ResolvedType, right: ResolvedType): Boolean {
     } else false
 }
 
+fun isInt(resolvedType: ResolvedType): Boolean {
+    return when (resolvedType) {
+        PrimitiveResolvedType("i32"),
+        PrimitiveResolvedType("u32"),
+        PrimitiveResolvedType("isize"),
+        PrimitiveResolvedType("usize"),
+        PrimitiveResolvedType("signed int"),
+        PrimitiveResolvedType("unsigned int"),
+        PrimitiveResolvedType("int") -> true
+
+        else -> false
+    }
+}
+
+fun isSignedInt(resolvedType: ResolvedType): Boolean {
+    return when (resolvedType) {
+        PrimitiveResolvedType("i32"),
+        PrimitiveResolvedType("isize"),
+        PrimitiveResolvedType("signed int"),
+        PrimitiveResolvedType("int") -> true
+
+        else -> false
+    }
+}
+
+fun isUnsignedInt(resolvedType: ResolvedType): Boolean {
+    return when (resolvedType) {
+        PrimitiveResolvedType("u32"),
+        PrimitiveResolvedType("usize"),
+        PrimitiveResolvedType("unsigned int"),
+        PrimitiveResolvedType("int") -> true
+
+        else -> false
+    }
+}
+
 class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
     fun resolveType(node: TypeNode): ResolvedType {
         when (node) {
@@ -3162,42 +3198,6 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         if (right == PrimitiveResolvedType("unsigned int") && isUnsignedInt(left))
             return left
         throw SemanticException("$left does not match with $right")
-    }
-
-    fun isInt(resolvedType: ResolvedType): Boolean {
-        return when (resolvedType) {
-            PrimitiveResolvedType("i32"),
-            PrimitiveResolvedType("u32"),
-            PrimitiveResolvedType("isize"),
-            PrimitiveResolvedType("usize"),
-            PrimitiveResolvedType("signed int"),
-            PrimitiveResolvedType("unsigned int"),
-            PrimitiveResolvedType("int") -> true
-
-            else -> false
-        }
-    }
-
-    fun isSignedInt(resolvedType: ResolvedType): Boolean {
-        return when (resolvedType) {
-            PrimitiveResolvedType("i32"),
-            PrimitiveResolvedType("isize"),
-            PrimitiveResolvedType("signed int"),
-            PrimitiveResolvedType("int") -> true
-
-            else -> false
-        }
-    }
-
-    fun isUnsignedInt(resolvedType: ResolvedType): Boolean {
-        return when (resolvedType) {
-            PrimitiveResolvedType("u32"),
-            PrimitiveResolvedType("usize"),
-            PrimitiveResolvedType("unsigned int"),
-            PrimitiveResolvedType("int") -> true
-
-            else -> false
-        }
     }
 
     fun resolvePath(path: PathExprNode): Symbol {

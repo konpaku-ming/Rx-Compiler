@@ -64,6 +64,7 @@ import ast.TokenType
 import ast.TraitScope
 import ast.UnitResolvedType
 import ast.VariantSymbol
+import ast.isSignedInt
 import ast.stringToUInt
 import exception.IRException
 
@@ -387,15 +388,193 @@ class LLVMIRGenerator(
     }
 
     override fun visitBinaryExpr(node: BinaryExprNode) {
-        TODO("Not yet implemented")
+        val previousScope = scopeTree.currentScope
+        scopeTree.currentScope = node.scopePosition!!
+
+        node.left.accept(this)
+        val leftValue = result
+        node.right.accept(this)
+        val rightValue = result
+        val resultType = getLLVMType(node.resolvedType)
+
+        val temp = emitter.newTemp()
+        when (node.operator.type) {
+            TokenType.Add -> {
+                emitter.emit("$temp = add $resultType $leftValue, $rightValue")
+            }
+
+            TokenType.SubNegate -> {
+                emitter.emit("$temp = sub $resultType $leftValue, $rightValue")
+            }
+
+            TokenType.Mul -> {
+                emitter.emit("$temp = mul $resultType $leftValue, $rightValue")
+            }
+
+            TokenType.Div -> {
+                if (isSignedInt(node.resolvedType)) {
+                    emitter.emit("$temp = sdiv $resultType $leftValue, $rightValue")
+                } else {
+                    emitter.emit("$temp = udiv $resultType $leftValue, $rightValue")
+                }
+            }
+
+            TokenType.Mod -> {
+                if (isSignedInt(node.resolvedType)) {
+                    emitter.emit("$temp = srem $resultType $leftValue, $rightValue")
+                } else {
+                    emitter.emit("$temp = urem $resultType $leftValue, $rightValue")
+                }
+            }
+
+            TokenType.BitAnd -> {
+                emitter.emit("$temp = and $resultType $leftValue, $rightValue")
+            }
+
+            TokenType.BitOr -> {
+                emitter.emit("$temp = or $resultType $leftValue, $rightValue")
+            }
+
+            TokenType.BitXor -> {
+                emitter.emit("$temp = xor $resultType $leftValue, $rightValue")
+            }
+
+            TokenType.Shl -> {
+                emitter.emit("$temp = shl $resultType $leftValue, $rightValue")
+            }
+
+            TokenType.Shr -> {
+                emitter.emit("$temp = ashr $resultType $leftValue, $rightValue")
+            }
+
+            else -> throw IRException("Unsupported binary operator: ${node.operator}")
+        }
+        result = temp
+
+        scopeTree.currentScope = previousScope
     }
 
     override fun visitComparisonExpr(node: ComparisonExprNode) {
-        TODO("Not yet implemented")
+        val previousScope = scopeTree.currentScope
+        scopeTree.currentScope = node.scopePosition!!
+
+        node.left.accept(this)
+        val leftValue = result
+        node.right.accept(this)
+        val rightValue = result
+
+        val operandType = {
+            val leftType = getLLVMType(node.left.resolvedType)
+            val rightType = getLLVMType(node.right.resolvedType)
+            if (leftType == rightType) leftType
+            else throw IRException("Cannot compare $leftType with $rightType")
+        }
+
+        val temp = emitter.newTemp()
+        when (node.operator.type) {
+            TokenType.Eq -> {
+                emitter.emit("$temp = icmp eq $operandType $leftValue, $rightValue")
+            }
+
+            TokenType.Neq -> {
+                emitter.emit("$temp = icmp ne $operandType $leftValue, $rightValue")
+            }
+
+            TokenType.Lt -> {
+                if (isSignedInt(node.left.resolvedType) && isSignedInt(node.right.resolvedType)) {
+                    emitter.emit("$temp = icmp slt $operandType $leftValue, $rightValue")
+                } else {
+                    emitter.emit("$temp = icmp ult $operandType $leftValue, $rightValue")
+                }
+            }
+
+            TokenType.Le -> {
+                if (isSignedInt(node.left.resolvedType) && isSignedInt(node.right.resolvedType)) {
+                    emitter.emit("$temp = icmp sle $operandType $leftValue, $rightValue")
+                } else {
+                    emitter.emit("$temp = icmp ule $operandType $leftValue, $rightValue")
+                }
+            }
+
+            TokenType.Gt -> {
+                if (isSignedInt(node.left.resolvedType) && isSignedInt(node.right.resolvedType)) {
+                    emitter.emit("$temp = icmp sgt $operandType $leftValue, $rightValue")
+                } else {
+                    emitter.emit("$temp = icmp ugt $operandType $leftValue, $rightValue")
+                }
+            }
+
+            TokenType.Ge -> {
+                if (isSignedInt(node.left.resolvedType) && isSignedInt(node.right.resolvedType)) {
+                    emitter.emit("$temp = icmp sge $operandType $leftValue, $rightValue")
+                } else {
+                    emitter.emit("$temp = icmp uge $operandType $leftValue, $rightValue")
+                }
+            }
+
+            else -> throw IRException("Unsupported comparison operator: ${node.operator}")
+        }
+        result = temp
+
+        scopeTree.currentScope = previousScope
     }
 
     override fun visitLazyBooleanExpr(node: LazyBooleanExprNode) {
-        TODO("Not yet implemented")
+        val previousScope = scopeTree.currentScope
+        scopeTree.currentScope = node.scopePosition!!
+
+        // 创建基本块
+        val rightEvalBlock = emitter.newBlock("right_eval")
+        val mergeBlock = emitter.newBlock("merge")
+
+        // 生成左侧表达式的IR
+        node.left.accept(this)
+        val leftValue = result
+
+        // 根据操作符类型跳转到不同块
+        when (node.operator.type) {
+            TokenType.And -> {
+                // 如果左侧为false，直接跳转到合并块
+                emitter.emit("br i1 $leftValue, label %$rightEvalBlock, label %$mergeBlock")
+            }
+
+            TokenType.Or -> {
+                // 如果左侧为true，直接跳转到合并块
+                emitter.emit("br i1 $leftValue, label %$mergeBlock, label %$rightEvalBlock")
+            }
+
+            else -> throw IRException("Unsupported lazy boolean operator: ${node.operator}")
+        }
+
+        // 右侧求值块
+        emitter.switchBlock(rightEvalBlock)
+        node.right.accept(this)
+        val rightValue = result
+        emitter.emit("br label %$mergeBlock")
+
+        // 合并块
+        emitter.switchBlock(mergeBlock)
+        val phi = emitter.newTemp()
+        when (node.operator.type) {
+            TokenType.And -> {
+                // &&: 如果来自右侧求值块，使用右侧值；否则使用左侧值（false）
+                emitter.emit(
+                    "$phi = phi i1 [$rightValue, %$rightEvalBlock], [$leftValue, %${emitter.currentBlock}]"
+                )
+            }
+
+            TokenType.Or -> {
+                // ||: 如果来自右侧求值块，使用右侧值；否则使用左侧值（true）
+                emitter.emit(
+                    "$phi = phi i1 [$rightValue, %$rightEvalBlock], [$leftValue, %${emitter.currentBlock}]"
+                )
+            }
+
+            else -> throw IRException("Unsupported lazy boolean operator: ${node.operator}")
+        }
+        result = phi
+
+        scopeTree.currentScope = previousScope
     }
 
     override fun visitTypeCastExpr(node: TypeCastExprNode) {
