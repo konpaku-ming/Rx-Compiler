@@ -387,7 +387,62 @@ class LLVMIRGenerator(
     }
 
     override fun visitBinaryExpr(node: BinaryExprNode) {
-        TODO("Not yet implemented")
+        val previousScope = scopeTree.currentScope
+        scopeTree.currentScope = node.scopePosition!! // Set current scope to node's scope position
+        
+        // Visit left operand and get its result
+        node.left.accept(this)
+        val leftValue = result
+        
+        // Visit right operand and get its result
+        node.right.accept(this)
+        val rightValue = result
+        
+        // Get LLVM type of operands
+        val resultType = getLLVMType(node.resolvedType)
+        
+        // Generate corresponding LLVM instruction based on operator type
+        val temp = emitter.newTemp()
+        when (node.operator.type) {
+            TokenType.Add -> {
+                emitter.emit("$temp = add $resultType $leftValue, $rightValue")
+            }
+            TokenType.SubNegate -> {
+                emitter.emit("$temp = sub $resultType $leftValue, $rightValue")
+            }
+            TokenType.Mul -> {
+                emitter.emit("$temp = mul $resultType $leftValue, $rightValue")
+            }
+            TokenType.Div -> {
+                // Use sdiv for signed division
+                emitter.emit("$temp = sdiv $resultType $leftValue, $rightValue")
+            }
+            TokenType.Mod -> {
+                // Use srem for signed remainder
+                emitter.emit("$temp = srem $resultType $leftValue, $rightValue")
+            }
+            TokenType.BitAnd -> {
+                emitter.emit("$temp = and $resultType $leftValue, $rightValue")
+            }
+            TokenType.BitOr -> {
+                emitter.emit("$temp = or $resultType $leftValue, $rightValue")
+            }
+            TokenType.BitXor -> {
+                emitter.emit("$temp = xor $resultType $leftValue, $rightValue")
+            }
+            TokenType.Shl -> {
+                emitter.emit("$temp = shl $resultType $leftValue, $rightValue")
+            }
+            TokenType.Shr -> {
+                // Use ashr for arithmetic right shift
+                emitter.emit("$temp = ashr $resultType $leftValue, $rightValue")
+            }
+            else -> throw IRException("Unsupported binary operator: ${node.operator}")
+        }
+        
+        result = temp
+        
+        scopeTree.currentScope = previousScope // Restore previous scope state
     }
 
     override fun visitComparisonExpr(node: ComparisonExprNode) {
