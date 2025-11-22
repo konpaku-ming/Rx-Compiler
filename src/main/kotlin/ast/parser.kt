@@ -115,7 +115,7 @@ class Parser(private val tokens: List<Token>) {
             TokenType.WHILE,
             TokenType.BREAK,
             TokenType.CONTINUE,
-            TokenType.RETURN-> true
+            TokenType.RETURN -> true
 
             else -> false
         }
@@ -372,7 +372,8 @@ class Parser(private val tokens: List<Token>) {
                     TokenType.LeftBrace -> parseBlockExpr(consume())
                     TokenType.IF -> parseIfExpr(consume())
                     TokenType.LOOP -> parseInfiniteLoopExpr(consume())
-                    else -> parsePredicateLoopExpr(consume())
+                    TokenType.WHILE -> parsePredicateLoopExpr(consume())
+                    else -> throw SyntaxException("unexpected token")
                 }
                 if (match(TokenType.Semicolon)) {
                     statements.add(ExprStmtNode(blockExpr))
