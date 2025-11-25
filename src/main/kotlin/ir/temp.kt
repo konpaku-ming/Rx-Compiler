@@ -5,7 +5,7 @@ import exception.IRException
 class LLVMEmitter {
     private var tempCounter = 1
     private var blockCounter = 0
-    private var varCounter = 1
+    private var fnCounter = 1
 
     // 模块级：函数表和全局定义
     private val functions = LinkedHashMap<String, LinkedHashMap<String, MutableList<String>>>()
@@ -19,9 +19,9 @@ class LLVMEmitter {
     var importPtr: Boolean = false
 
     // 临时变量生成
-    fun newTemp(): String = "%${tempCounter++}"
+    fun newTemp(): String = "%_${tempCounter++}"
 
-    fun newVarCount(): String = "${varCounter++}"
+    fun newFnCount(): String = "${fnCounter++}"
 
     // 开始一个函数
     fun startFunction(fnName: String, retType: String, params: List<String>) {
@@ -40,7 +40,7 @@ class LLVMEmitter {
         currentBlock = "entry" // 开entry块
         functions[fnName]!![currentBlock] = mutableListOf()
         if (!importPtr && retType != "void") {
-            emit("%${currentFunction}.retval_ptr = alloca $currentFunction") // 返回的值
+            emit("%${currentFunction}.retval_ptr = alloca $currentFunction, align 4") // 返回的值
         }
     }
 

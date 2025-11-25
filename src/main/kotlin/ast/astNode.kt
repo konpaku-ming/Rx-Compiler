@@ -151,6 +151,8 @@ data class LetStmtNode(
     }
 
     var variableResolvedType: ResolvedType = UnknownResolvedType
+
+    var irAddress: String = "null"
 }
 
 data class ExprStmtNode(
@@ -290,6 +292,8 @@ data class PathExprNode(
     override fun accept(visitor: ASTVisitor) {
         visitor.visitPathExpr(this)
     }
+
+    var irAddress: String = "null"
 }
 
 data class BlockExprNode(

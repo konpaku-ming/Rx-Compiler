@@ -11,7 +11,7 @@ data class VariableSymbol(
     override val name: String,
     val type: ResolvedType,
     val isMut: Boolean,
-    var irAddress: String? = null  // IR中的地址，如 %x.1
+    val irAddress: String, // IR中的地址，如 %x.1
 ) : Symbol()
 
 data class SelfParameter(
@@ -34,6 +34,7 @@ data class FunctionSymbol(
     val isMethod: Boolean,
     val isAssociated: Boolean,
     val isDefined: Boolean = true,
+    var irFnName: String = "null",  // IR中的函数名
 ) : Symbol() {
     override fun toString(): String {
         return "FunctionSymbol(name='$name', returnType='${returnType.name}')"
@@ -47,7 +48,6 @@ data class ConstantSymbol(
     var value: Any?,
     val isAssociated: Boolean,
     val isDefined: Boolean = true, // 是否定义
-    var irValue: String? = null  // IR中的常量值
 ) : Symbol()
 
 data class StructSymbol(
@@ -55,7 +55,7 @@ data class StructSymbol(
     val fields: MutableMap<String, ResolvedType>,
     val functions: MutableMap<String, FunctionSymbol> = mutableMapOf(),
     val methods: MutableMap<String, FunctionSymbol> = mutableMapOf(),
-    val constants: MutableMap<String, ConstantSymbol> = mutableMapOf()
+    val constants: MutableMap<String, ConstantSymbol> = mutableMapOf(),
 ) : Symbol() {
     override fun toString(): String {
         return "StructSymbol(name='$name', fields=${fields.keys})"
