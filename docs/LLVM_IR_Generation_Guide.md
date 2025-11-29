@@ -7,14 +7,16 @@
 1. [概述](#概述)
 2. [核心组件](#核心组件)
 3. [类型系统](#类型系统)
-4. [基本代码生成](#基本代码生成)
-5. [语句降低](#语句降低)
-6. [表达式降低](#表达式降低)
-7. [控制流](#控制流)
-8. [函数与调用](#函数与调用)
-9. [结构体与数组](#结构体与数组)
-10. [完整示例](#完整示例)
-11. [调试与验证](#调试与验证)
+4. [设计原则：复制策略](#设计原则复制策略)
+5. [基本代码生成](#基本代码生成)
+6. [语句降低](#语句降低)
+7. [表达式降低](#表达式降低)
+8. [控制流](#控制流)
+9. [函数与调用](#函数与调用)
+10. [结构体与数组](#结构体与数组)
+11. [完整示例](#完整示例)
+12. [调试与验证](#调试与验证)
+13. [注意事项与检查清单](#注意事项与检查清单)
 
 ---
 
@@ -28,6 +30,7 @@
 | `irType.kt` | IR 类型定义（`VoidType`, `IntegerType`, `StructType`, `ArrayType`, `FunctionType`, `PointerType`） |
 | `irComponents.kt` | IR 组件（`Module`, `Function`, `BasicBlock`, 各种 `Instruction`, `Value`, `Constant`） |
 | `irBuilder.kt` | `IRBuilder` 类，提供创建指令的便捷方法 |
+| `ir/structDefiner.kt` | `StructDefiner` 类，负责定义所有结构体类型、生成全局常量以及为每个结构体生成计算大小的函数 |
 
 ### 架构图
 
@@ -226,6 +229,137 @@ getIRType(context, ArrayResolvedType(elementType, lengthExpr))  // -> ArrayType
 
 ---
 
+## 设计原则：复制策略
+
+### 标量 vs 聚合类型
+
+在生成变量赋值或初始化的 IR 时，需要根据类型选择不同的策略：
+
+| 类型 | 复制策略 | 示例 |
+|------|----------|------|
+| 标量类型（i32, i8, i1, ptr） | load + store | `store i32 %val, ptr %dst` |
+| 结构体类型（struct） | memcpy | `call void @llvm.memcpy.p0.p0.i32(...)` |
+| 数组类型（array） | memcpy | `call void @llvm.memcpy.p0.p0.i32(...)` |
+
+**重要**：数组和结构体的复制**必须**使用 `memcpy`，而不是 load + store。这是因为：
+1. LLVM IR 中对聚合类型的 load/store 在某些情况下可能导致低效的代码生成
+2. 使用 memcpy 可以确保正确处理大型结构体和数组
+3. memcpy 允许编译器进行更好的优化
+
+### structDefiner.kt 的预处理工作
+
+在 IR 生成之前，`ir/structDefiner.kt` 中的 `StructDefiner` 类会完成以下预处理工作：
+
+1. **结构体定义**：所有 struct 类型在 IR 中被声明和定义
+2. **全局常量生成**：所有常量被生成为 IR 中的全局常量（global constants）
+3. **大小函数生成**：为每个 struct 生成一个计算该 struct 所占字节大小的函数
+
+```kotlin
+// structDefiner.kt 生成的内容示例：
+
+// 1. 结构体类型定义
+// %struct.Point = type { i32, i32 }
+
+// 2. 全局常量
+// @MY_CONST = constant i32 42
+
+// 3. 结构体大小函数（供 memcpy 使用）
+// define i32 @size_Point() { ret i32 8 }
+```
+
+### memcpy 的使用
+
+#### memcpy intrinsic 声明
+
+```llvm
+declare void @llvm.memcpy.p0.p0.i32(ptr nocapture writeonly, ptr nocapture readonly, i32, i1)
+```
+
+参数说明：
+- 第一个参数：目标地址（ptr）
+- 第二个参数：源地址（ptr）
+- 第三个参数：复制大小（i32，字节数）
+- 第四个参数：是否为 volatile（i1，通常为 false）
+
+#### 使用 IRBuilder 生成 memcpy
+
+```kotlin
+// 使用 IRBuilder.createMemCpy 方法
+fun copyStruct(builder: IRBuilder, context: LLVMContext, module: Module,
+               dstPtr: Value, srcPtr: Value, structName: String) {
+    // 调用 structDefiner 生成的大小函数获取结构体大小
+    val sizeFunc = module.myGetFunction("size_$structName")
+        ?: throw IRException("Size function not found for struct: $structName")
+    val sizeVal = builder.createCall(sizeFunc, emptyList(), "size")
+    
+    // 调用 memcpy
+    builder.createMemCpy(dstPtr, srcPtr, sizeVal, false)
+}
+```
+
+#### 生成的 IR 示例
+
+```llvm
+; 复制结构体 Point
+%size = call i32 @size_Point()
+call void @llvm.memcpy.p0.p0.i32(ptr %dst, ptr %src, i32 %size, i1 false)
+```
+
+### 数组复制大小计算
+
+对于数组，复制大小需要根据元素类型和数组长度计算：
+
+```kotlin
+fun getArrayCopySize(context: LLVMContext, arrayType: ArrayType): Value {
+    val elementSize = getElementSize(context, arrayType.elementType)
+    val arrayLength = arrayType.numElements
+    val totalSize = elementSize * arrayLength
+    return context.myGetIntConstant(context.myGetI32Type(), totalSize)
+}
+
+// 元素大小计算（字节）
+fun getElementSize(context: LLVMContext, type: IRType): Int {
+    return when (type) {
+        is I1Type -> 1
+        is I8Type -> 1
+        is I32Type -> 4
+        is PointerType -> 4  // 32位平台
+        is StructType -> {
+            // 调用 size_StructName 函数或根据字段累加
+            type.elements.sumOf { getElementSize(context, it) }
+        }
+        is ArrayType -> type.numElements * getElementSize(context, type.elementType)
+        else -> throw IRException("Unknown type size: $type")
+    }
+}
+```
+
+### 常量初始化优化
+
+当初始化值是常量（如结构体字面量或数组字面量）时，应优先使用 `structDefiner.kt` 中已生成的全局常量：
+
+```kotlin
+fun initializeFromGlobalConstant(builder: IRBuilder, context: LLVMContext, 
+                                  module: Module, dstPtr: Value, 
+                                  globalConstName: String, size: Value) {
+    // 获取全局常量
+    val globalConst = module.myGetGlobalVariable(globalConstName)
+        ?: throw IRException("Global constant not found: $globalConstName")
+    
+    // 使用 memcpy 从全局常量复制到局部变量
+    builder.createMemCpy(dstPtr, globalConst, size, false)
+}
+```
+
+生成的 IR：
+```llvm
+; 假设 @const_Point_0 是预生成的全局常量
+%size = call i32 @size_Point()
+call void @llvm.memcpy.p0.p0.i32(ptr %local_point, ptr @const_Point_0, i32 %size, i1 false)
+```
+
+---
+
 ## 基本代码生成
 
 ### 创建一个简单函数
@@ -278,31 +412,79 @@ entry:
 
 ### LetStmtNode（变量声明）
 
-```kotlin
-// 对应: let x: i32 = 10;
+变量声明需要根据类型选择不同的初始化策略：
 
-fun lowerLetStmt(node: LetStmtNode, builder: IRBuilder, context: LLVMContext) {
+```kotlin
+// 对应: let x: i32 = 10;        (标量)
+// 对应: let p: Point = Point { x: 1, y: 2 };  (结构体)
+// 对应: let arr: [i32; 3] = [1, 2, 3];  (数组)
+
+fun lowerLetStmt(node: LetStmtNode, builder: IRBuilder, context: LLVMContext, module: Module) {
     // 获取变量类型
     val varType = getIRType(context, node.variableResolvedType)
     
     // 分配栈空间
     val allocaInst = builder.createAlloca(varType, "x")
     
-    // 生成初始化值
-    val initValue = lowerExpr(node.value, builder, context)
-    
-    // 存储到分配的地址
-    builder.createStore(initValue, allocaInst)
+    // 根据类型选择初始化策略
+    when {
+        varType is StructType -> {
+            // 结构体：使用 memcpy
+            val srcAddr = lowerExprToAddress(node.value, builder, context)
+            val structName = varType.name
+            val sizeFunc = module.myGetFunction("size_$structName")!!
+            val size = builder.createCall(sizeFunc, emptyList(), "size")
+            builder.createMemCpy(allocaInst, srcAddr, size, false)
+        }
+        varType is ArrayType -> {
+            // 数组：使用 memcpy
+            val srcAddr = lowerExprToAddress(node.value, builder, context)
+            val size = getArrayCopySize(context, varType)
+            builder.createMemCpy(allocaInst, srcAddr, size, false)
+        }
+        else -> {
+            // 标量：使用 load + store
+            val initValue = lowerExpr(node.value, builder, context)
+            builder.createStore(initValue, allocaInst)
+        }
+    }
     
     // 记录变量地址到符号表（实际代码中 node.irAddress 已经被设置）
     // symbolTable["x"] = allocaInst
 }
 ```
 
-生成的 IR：
+#### 标量类型生成的 IR
 ```llvm
+; let x: i32 = 10;
 %x = alloca i32
 store i32 10, ptr %x
+```
+
+#### 结构体类型生成的 IR
+```llvm
+; let p: Point = Point { x: 1, y: 2 };
+%p = alloca %struct.Point
+; 假设右侧表达式地址为 %tmp.struct
+%size = call i32 @size_Point()
+call void @llvm.memcpy.p0.p0.i32(ptr %p, ptr %tmp.struct, i32 %size, i1 false)
+```
+
+#### 使用全局常量初始化结构体
+```llvm
+; 如果初始化值是常量，可以直接从全局常量复制
+; let p: Point = CONST_POINT;
+%p = alloca %struct.Point
+%size = call i32 @size_Point()
+call void @llvm.memcpy.p0.p0.i32(ptr %p, ptr @CONST_POINT, i32 %size, i1 false)
+```
+
+#### 数组类型生成的 IR
+```llvm
+; let arr: [i32; 3] = [1, 2, 3];
+%arr = alloca [3 x i32]
+; 假设右侧数组字面量地址为 %tmp.array 或使用全局常量 @const_arr
+call void @llvm.memcpy.p0.p0.i32(ptr %arr, ptr %tmp.array, i32 12, i1 false)
 ```
 
 ### ExprStmtNode（表达式语句）
@@ -318,22 +500,64 @@ fun lowerExprStmt(node: ExprStmtNode, builder: IRBuilder, context: LLVMContext) 
 
 ### AssignExprNode（赋值表达式）
 
-```kotlin
-// 对应: x = 20;
+赋值表达式也需要根据类型选择不同的策略：
 
-fun lowerAssignExpr(node: AssignExprNode, builder: IRBuilder, context: LLVMContext): Value {
+```kotlin
+// 对应: x = 20;            (标量)
+// 对应: p = other_point;   (结构体)
+// 对应: arr = other_arr;   (数组)
+
+fun lowerAssignExpr(node: AssignExprNode, builder: IRBuilder, context: LLVMContext, module: Module): Value {
     // 获取左值地址
-    val ptr = getLValueAddress(node.left, builder, context)
+    val dstPtr = getLValueAddress(node.left, builder, context)
     
-    // 生成右值
-    val value = lowerExpr(node.right, builder, context)
+    // 获取赋值类型
+    val assignType = getIRType(context, node.left.resolvedType)
     
-    // 存储
-    builder.createStore(value, ptr)
+    when {
+        assignType is StructType -> {
+            // 结构体：使用 memcpy
+            val srcPtr = lowerExprToAddress(node.right, builder, context)
+            val structName = assignType.name
+            val sizeFunc = module.myGetFunction("size_$structName")!!
+            val size = builder.createCall(sizeFunc, emptyList(), "size")
+            builder.createMemCpy(dstPtr, srcPtr, size, false)
+        }
+        assignType is ArrayType -> {
+            // 数组：使用 memcpy
+            val srcPtr = lowerExprToAddress(node.right, builder, context)
+            val size = getArrayCopySize(context, assignType)
+            builder.createMemCpy(dstPtr, srcPtr, size, false)
+        }
+        else -> {
+            // 标量：使用 load + store
+            val value = lowerExpr(node.right, builder, context)
+            builder.createStore(value, dstPtr)
+        }
+    }
     
     // 赋值表达式返回 unit 类型，不需要返回有意义的值
     return context.myGetIntConstant(context.myGetI8Type(), 0)
 }
+```
+
+#### 标量赋值生成的 IR
+```llvm
+; x = 20;
+store i32 20, ptr %x
+```
+
+#### 结构体赋值生成的 IR
+```llvm
+; p = other_point;
+%size = call i32 @size_Point()
+call void @llvm.memcpy.p0.p0.i32(ptr %p, ptr %other_point, i32 %size, i1 false)
+```
+
+#### 数组赋值生成的 IR
+```llvm
+; arr = other_arr;
+call void @llvm.memcpy.p0.p0.i32(ptr %arr, ptr %other_arr, i32 12, i1 false)
 ```
 
 ---
@@ -764,7 +988,16 @@ fun lowerReturnExpr(
 
 ## 结构体与数组
 
+> **重要**：结构体和数组的复制必须使用 `memcpy`，而不是 load+store。详见[设计原则：复制策略](#设计原则复制策略)。
+
 ### StructExprNode（结构体构造）
+
+结构体构造有两种策略：
+
+1. **逐字段构造**：当字段值需要动态计算时
+2. **从全局常量复制**：当所有字段都是常量时（推荐）
+
+#### 策略 1：逐字段构造
 
 ```kotlin
 // 对应:
@@ -798,9 +1031,47 @@ fun lowerStructExpr(
         builder.createStore(fieldValue, fieldPtr)
     }
     
-    // 4. 加载整个结构体
-    return builder.createLoad(structType, alloca, "struct_val")
+    // 4. 返回结构体地址（注意：不要使用 load 加载整个结构体）
+    return alloca
 }
+```
+
+#### 策略 2：从全局常量复制（推荐）
+
+当结构体字面量的所有字段都是常量时，`structDefiner.kt` 会预先生成一个全局常量。此时应使用 memcpy 从全局常量复制：
+
+```kotlin
+fun lowerConstStructExpr(
+    node: StructExprNode,
+    builder: IRBuilder,
+    context: LLVMContext,
+    module: Module,
+    globalConstName: String  // structDefiner 生成的全局常量名
+): Value {
+    val structName = (node.path.first.segment.value)
+    val structType = context.myGetStructType(structName)
+    
+    // 分配栈空间
+    val alloca = builder.createAlloca(structType, "struct_tmp")
+    
+    // 获取全局常量
+    val globalConst = module.myGetGlobalVariable(globalConstName)!!
+    
+    // 使用 memcpy 复制
+    val sizeFunc = module.myGetFunction("size_$structName")!!
+    val size = builder.createCall(sizeFunc, emptyList(), "size")
+    builder.createMemCpy(alloca, globalConst, size, false)
+    
+    return alloca
+}
+```
+
+生成的 IR（使用全局常量）：
+```llvm
+%struct_tmp = alloca %struct.Point
+%size = call i32 @size_Point()
+call void @llvm.memcpy.p0.p0.i32(ptr %struct_tmp, ptr @const_Point_0, i32 %size, i1 false)
+```
 ```
 
 ### FieldExprNode（字段访问）
@@ -836,6 +1107,13 @@ fun lowerFieldExpr(
 
 ### ArrayListExprNode（数组字面量）
 
+数组字面量的构造也有两种策略：
+
+1. **逐元素构造**：当元素值需要动态计算时
+2. **从全局常量复制**：当所有元素都是常量时（推荐）
+
+#### 策略 1：逐元素构造
+
 ```kotlin
 // 对应: [1, 2, 3]
 
@@ -862,8 +1140,47 @@ fun lowerArrayListExpr(
         builder.createStore(elemValue, elemPtr)
     }
     
-    return builder.createLoad(arrayType, alloca, "array_val")
+    // 返回数组地址（注意：不要使用 load 加载整个数组）
+    return alloca
 }
+```
+
+#### 策略 2：从全局常量复制（推荐）
+
+当数组字面量的所有元素都是常量时，应使用 memcpy 从预生成的全局常量复制：
+
+```kotlin
+fun lowerConstArrayExpr(
+    node: ArrayListExprNode,
+    builder: IRBuilder,
+    context: LLVMContext,
+    module: Module,
+    globalConstName: String  // structDefiner 生成的全局常量名
+): Value {
+    val elemType = getIRType(context, (node.resolvedType as ArrayResolvedType).elementType)
+    val arrayType = context.myGetArrayType(elemType, node.elements.size)
+    
+    // 分配栈空间
+    val alloca = builder.createAlloca(arrayType, "array_tmp")
+    
+    // 获取全局常量
+    val globalConst = module.myGetGlobalVariable(globalConstName)!!
+    
+    // 计算数组大小
+    val size = getArrayCopySize(context, arrayType)
+    
+    // 使用 memcpy 复制
+    builder.createMemCpy(alloca, globalConst, size, false)
+    
+    return alloca
+}
+```
+
+生成的 IR（使用全局常量）：
+```llvm
+; 假设 @const_arr_0 = constant [3 x i32] [i32 1, i32 2, i32 3]
+%array_tmp = alloca [3 x i32]
+call void @llvm.memcpy.p0.p0.i32(ptr %array_tmp, ptr @const_arr_0, i32 12, i1 false)
 ```
 
 ### IndexExprNode（数组索引）
@@ -1185,12 +1502,14 @@ clang output.s -o output
 | `IntLiteralExprNode` | `ConstantInt` |
 | `BooleanLiteralExprNode` | `ConstantInt` (i1) |
 | `CharLiteralExprNode` | `ConstantInt` (i8) |
-| `LetStmtNode` | `alloca` + `store` |
+| `LetStmtNode` (标量) | `alloca` + `store` |
+| `LetStmtNode` (结构体/数组) | `alloca` + `memcpy`（使用 size 函数获取大小） |
 | `PathExprNode` (变量) | `load` |
 | `BinaryExprNode` | `add/sub/mul/sdiv/srem/and/or/xor/shl/ashr` |
 | `ComparisonExprNode` | `icmp` |
 | `NegationExprNode` | `neg/not` |
-| `AssignExprNode` | `store` |
+| `AssignExprNode` (标量) | `store` |
+| `AssignExprNode` (结构体/数组) | `memcpy`（使用 size 函数获取大小） |
 | `IfExprNode` | `br` + `cond br` + `phi` |
 | `PredicateLoopExprNode` | `br` + `cond br` (循环结构) |
 | `InfiniteLoopExprNode` | `br` (无条件循环) |
@@ -1198,9 +1517,109 @@ clang output.s -o output
 | `ContinueExprNode` | `br` 到 cond/body 块 |
 | `ReturnExprNode` | `ret` |
 | `CallExprNode` | `call` |
-| `StructExprNode` | `alloca` + `gep` + `store` |
+| `StructExprNode` | `alloca` + `gep` + `store` 或 `memcpy`（从全局常量） |
 | `FieldExprNode` | `gep` + `load` |
-| `ArrayListExprNode` | `alloca` + `gep` + `store` |
+| `ArrayListExprNode` | `alloca` + `gep` + `store` 或 `memcpy`（从全局常量） |
 | `IndexExprNode` | `gep` + `load` |
 | `BorrowExprNode` | 返回地址（不生成指令） |
 | `DerefExprNode` | `load` |
+
+---
+
+## 注意事项与检查清单
+
+### memcpy 使用检查清单
+
+在实现代码生成时，请确保以下几点：
+
+- [ ] **类型判断**：在 `LetStmtNode` 和 `AssignExprNode` 中正确判断类型是否为结构体或数组
+- [ ] **memcpy 大小参数**：结构体使用 `size_StructName()` 函数获取大小；数组通过元素大小 × 长度计算
+- [ ] **地址获取**：对于结构体和数组，需要获取地址而非值（使用 `lowerExprToAddress` 而非 `lowerExpr`）
+- [ ] **全局常量引用**：优先使用 `structDefiner.kt` 生成的全局常量进行初始化
+- [ ] **避免 load+store**：结构体和数组复制不要使用 load+store，必须使用 memcpy
+
+### 对齐（Alignment）注意事项
+
+- `structDefiner.kt` 中生成的 size 函数已经考虑了结构体的 padding
+- 使用 memcpy 时，对齐由 size 函数保证
+- 如果需要显式指定对齐，可以在 alloca 指令中添加对齐属性
+
+### volatile 和 atomic
+
+- memcpy 的最后一个参数 `isVolatile` 通常设置为 `false`
+- 如果复制的是 volatile 内存区域，需要设置为 `true`
+- 本项目当前不支持 atomic 操作
+
+### 常见错误
+
+1. **错误：对结构体使用 load+store**
+   ```kotlin
+   // 错误！
+   val structVal = builder.createLoad(structType, srcPtr)
+   builder.createStore(structVal, dstPtr)
+   
+   // 正确
+   val size = builder.createCall(sizeFunc, emptyList(), "size")
+   builder.createMemCpy(dstPtr, srcPtr, size, false)
+   ```
+
+2. **错误：重复构造常量**
+   ```kotlin
+   // 错误！每次都重新构造
+   val constStruct = buildStructConstant(...)
+   
+   // 正确：使用 structDefiner 生成的全局常量
+   val globalConst = module.myGetGlobalVariable("const_MyStruct_0")
+   builder.createMemCpy(dstPtr, globalConst, size, false)
+   ```
+
+3. **错误：使用错误的 size 计算**
+   ```kotlin
+   // 错误！手动计算可能忽略 padding
+   val size = context.myGetIntConstant(context.myGetI32Type(), 8)
+   
+   // 正确：调用 size 函数
+   val sizeFunc = module.myGetFunction("size_Point")!!
+   val size = builder.createCall(sizeFunc, emptyList(), "size")
+   ```
+
+### 测试用例建议
+
+以下是一些建议的测试用例，用于验证 memcpy 生成逻辑：
+
+#### 测试 1：结构体变量初始化
+```rust
+struct Point { x: i32, y: i32 }
+fn main() {
+    let p: Point = Point { x: 1, y: 2 };
+}
+```
+期望 IR 包含：`call void @llvm.memcpy.p0.p0.i32(...)`
+
+#### 测试 2：结构体赋值
+```rust
+struct Point { x: i32, y: i32 }
+fn main() {
+    let mut p1: Point = Point { x: 1, y: 2 };
+    let p2: Point = Point { x: 3, y: 4 };
+    p1 = p2;
+}
+```
+期望 IR：赋值操作使用 memcpy
+
+#### 测试 3：数组初始化
+```rust
+fn main() {
+    let arr: [i32; 3] = [1, 2, 3];
+}
+```
+期望 IR 包含：`call void @llvm.memcpy.p0.p0.i32(..., i32 12, ...)`
+
+#### 测试 4：从全局常量初始化
+```rust
+const ORIGIN: Point = Point { x: 0, y: 0 };
+fn main() {
+    let p: Point = ORIGIN;
+}
+```
+期望 IR：使用 `@ORIGIN` 全局常量地址进行 memcpy
