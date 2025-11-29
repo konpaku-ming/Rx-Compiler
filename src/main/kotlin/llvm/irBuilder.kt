@@ -246,13 +246,13 @@ class IRBuilder(val context: LLVMContext) {
         return zExt
     }
 
-    fun createGEP(type: IRType, ptr: Value, indices: List<Value>, name: String = ""): GetElementPtrInst {
+    fun createGEP(baseType: IRType, ptr: Value, indices: List<Value>, name: String = ""): GetElementPtrInst {
         if (insertBlock == null) {
             throw IRException("No insert block")
         }
         val actualName = name.ifEmpty { genLLVMReg() }
         val pointerType = context.myGetPointerType()
-        val gep = GetElementPtrInst(actualName, pointerType, type, ptr, indices)
+        val gep = GetElementPtrInst(actualName, pointerType, baseType, ptr, indices)
         insertBlock!!.addInstruction(gep)
         return gep
     }

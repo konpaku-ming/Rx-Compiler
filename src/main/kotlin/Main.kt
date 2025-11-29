@@ -12,6 +12,7 @@ import kotlin.system.exitProcess
 import exception.CompilerException
 import llvm.LLVMContext
 import llvm.Module
+import llvm.IRBuilder
 import ir.StructDefiner
 
 fun main(args: Array<String>) {
@@ -52,7 +53,8 @@ fun main(args: Array<String>) {
 
         val context = LLVMContext()
         val module = Module("main", context)
-        val structDefiner = StructDefiner(semanticScopeTree, context, module)
+        val builder = IRBuilder(context)
+        val structDefiner = StructDefiner(semanticScopeTree, context, module, builder)
         structDefiner.visitCrate(node = ast)
         /*
                 // 生成LLVM IR

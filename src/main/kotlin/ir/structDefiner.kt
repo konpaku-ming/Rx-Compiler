@@ -24,7 +24,6 @@ import ast.EnumItemNode
 import ast.ExprStmtNode
 import ast.FieldExprNode
 import ast.FunctionItemNode
-import ast.FunctionSymbol
 import ast.GroupedExprNode
 import ast.IfExprNode
 import ast.ImplItemNode
@@ -34,7 +33,6 @@ import ast.IntLiteralExprNode
 import ast.LazyBooleanExprNode
 import ast.LetStmtNode
 import ast.MethodCallExprNode
-import ast.NamedResolvedType
 import ast.NegationExprNode
 import ast.PathExprNode
 import ast.PredicateLoopExprNode
@@ -50,6 +48,7 @@ import ast.TraitItemNode
 import ast.TypeCastExprNode
 import ast.UnknownResolvedType
 import exception.IRException
+import llvm.IRBuilder
 import llvm.IntegerType
 import llvm.LLVMContext
 import llvm.Module
@@ -57,7 +56,8 @@ import llvm.Module
 class StructDefiner(
     private val scopeTree: ScopeTree,
     private val context: LLVMContext,
-    private val module: Module
+    private val module: Module,
+    private val builder: IRBuilder
 ) : ASTVisitor {
     override fun visitCrate(node: CrateNode) {
         scopeTree.currentScope = node.scopePosition!!
@@ -85,6 +85,25 @@ class StructDefiner(
                 }
                 structType.elements.add(getIRType(context, resolvedType))
             }
+
+            // 生成一个求该结构体大小的函数
+            val sizeFuncType = context.myGetFunctionType(
+                returnType = context.myGetI32Type(),
+                paramTypes = listOf()
+            )
+            val sizeFunc = module.createFunction("${structSymbol.name}.size", sizeFuncType)
+            val bodyBB = sizeFunc.createBasicBlock("body")
+            builder.setInsertPoint(bodyBB)
+            val gepInst = builder.createGEP(
+                structType,
+                context.myGetNullPtrConstant(),
+                listOf(context.myGetIntConstant(context.myGetI32Type(), 1))
+            ) // GEP
+            val sizeInst = builder.createPtrToInt(
+                context.myGetI32Type(),
+                gepInst,
+            ) // PtrToInt
+            builder.createRet(sizeInst) // Ret
         }
 
         scopeTree.currentScope = previousScope // 还原scope状态
