@@ -1866,7 +1866,7 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
     }
 
     override fun visitCrate(node: CrateNode) {
-        node.scopePosition = scopeTree.currentScope
+        scopeTree.currentScope = node.scopePosition!!
         // 依次visit每个item
         for (item in node.items) {
             item.accept(this)
@@ -2356,7 +2356,7 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
 
 class FourthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
     override fun visitCrate(node: CrateNode) {
-        node.scopePosition = scopeTree.currentScope
+        scopeTree.currentScope = node.scopePosition!!
         // 依次visit每个item
         for (item in node.items) {
             item.accept(this)
@@ -3310,7 +3310,7 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
     }
 
     override fun visitCrate(node: CrateNode) {
-        node.scopePosition = scopeTree.currentScope
+        scopeTree.currentScope = node.scopePosition!!
         // 依次visit每个item
         for (item in node.items) {
             item.accept(this)

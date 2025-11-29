@@ -7,11 +7,12 @@ import ast.FourthVisitor
 import ast.SecondVisitor
 import ast.ThirdVisitor
 import ast.removeComments
-import ir.LLVMEmitter
-import ir.LLVMIRGenerator
 import java.io.File
 import kotlin.system.exitProcess
 import exception.CompilerException
+import llvm.LLVMContext
+import llvm.Module
+import ir.StructDefiner
 
 fun main(args: Array<String>) {
     if (args.size != 1) {
@@ -49,18 +50,21 @@ fun main(args: Array<String>) {
         val fifthVisitor = FifthVisitor(semanticScopeTree)
         fifthVisitor.visitCrate(node = ast) // 第五次pass
 
-/*
-        // 生成LLVM IR
-        println("\n--- generating IR ---")
-        val emitter = LLVMEmitter()
-        val irGenerator = LLVMIRGenerator(emitter, semanticScopeTree)
-        irGenerator.visitCrate(ast)
+        val context = LLVMContext()
+        val module = Module("main", context)
+        val structDefiner = StructDefiner(semanticScopeTree, context, module)
+        structDefiner.visitCrate(node = ast)
+        /*
+                // 生成LLVM IR
+                println("\n--- generating IR ---")
+                val emitter = LLVMEmitter()
+                val irGenerator = LLVMIRGenerator(emitter, semanticScopeTree)
+                irGenerator.visitCrate(ast)
 
-        println("\n--- generated IR ---")
-        println(emitter.getIR())
-        println("-------------------")
-*/
-
+                println("\n--- generated IR ---")
+                println(emitter.getIR())
+                println("-------------------")
+        */
         println("success")
     } catch (e: CompilerException) {
         println("failed")

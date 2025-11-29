@@ -14,6 +14,9 @@ import ast.SecondVisitor
 import ast.ThirdVisitor
 import ast.FourthVisitor
 import ast.FifthVisitor
+import ir.StructDefiner
+import llvm.LLVMContext
+import llvm.Module
 
 data class CaseResult(
     val file: Path,
@@ -148,6 +151,9 @@ private fun compileOne(file: Path, expectedPass: Boolean, showSource: Boolean): 
         ThirdVisitor(semanticScopeTree).visitCrate(ast)
         FourthVisitor(semanticScopeTree).visitCrate(ast)
         FifthVisitor(semanticScopeTree).visitCrate(ast)
+        val context = LLVMContext()
+        val module = Module("main", context)
+        StructDefiner(semanticScopeTree, context, module).visitCrate(ast)
 
         CaseResult(file, expectedPass, actualPass = true, sourcePreview = sourcePreview)
     } catch (e: CompilerException) {
