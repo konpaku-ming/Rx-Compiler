@@ -56,6 +56,7 @@ import ast.VariableSymbol
 import ast.stringToChar
 import ast.stringToUInt
 import exception.IRException
+import exception.SemanticException
 import llvm.Argument
 import llvm.ArrayType
 import llvm.Function
@@ -82,12 +83,6 @@ class ASTLower(
     // 如果当前函数返回 struct/array，则此变量保存传入的返回缓冲区指针（第一个参数）
     // 否则为 null
     private var currentReturnBufferPtr: Value? = null
-
-    // 判断返回类型是否需要使用 caller-allocated buffer ABI
-    // 结构体和数组类型需要通过指针返回，而非直接通过值返回
-    private fun isAggregateReturnType(returnType: IRType): Boolean {
-        return returnType is StructType || returnType is ArrayType
-    }
 
     private fun getArrayCopySize(arrayType: ArrayType): Value {
         val elementSize = getElementSize(arrayType.elementType)
@@ -148,10 +143,13 @@ class ASTLower(
         scopeTree.currentScope = node.scopePosition!!
 
         // 获取函数符号以获取返回类型信息
-        val funcScope = node.scopePosition as? FunctionScope
-        val funcSymbol = funcScope?.functionSymbol
+        val fnName = node.fnName.value
+        val funcSymbol = scopeTree.lookup(fnName)
+        if (funcSymbol == null || funcSymbol !is FunctionSymbol) {
+            throw SemanticException("missing FunctionSymbol")
+        }
 
-        if (funcSymbol != null && node.body != null) {
+        if (node.body != null) {
             // 获取原始返回类型的 IR 类型
             val originalReturnType = getIRType(context, funcSymbol.returnType)
 
@@ -161,7 +159,7 @@ class ASTLower(
             // 2. 添加第一个参数作为返回缓冲区指针（caller-allocated）
             // 3. 在函数体内将结果写入该指针
             // 4. 最后 ret void
-            if (isAggregateReturnType(originalReturnType)) {
+            if (originalReturnType.isAggregate()) {
                 // TODO: 完整实现函数 IR 生成时：
                 // - 生成的函数签名：第一个参数为 ptr 类型（返回缓冲区指针）
                 // - 实际返回类型变为 void
@@ -177,8 +175,6 @@ class ASTLower(
 
             // 清理返回缓冲区指针
             currentReturnBufferPtr = null
-        } else if (node.body != null) {
-            visitBlockExpr(node.body, createScope = false)
         }
 
         scopeTree.currentScope = previousScope // 还原scope状态
@@ -588,7 +584,7 @@ class ASTLower(
         // 2. 将该空间的指针作为第一个参数传入
         // 3. 函数调用返回 void，实际结果写入该缓冲区
         // 4. 调用结束后，缓冲区指针即为结果的地址
-        if (isAggregateReturnType(returnType)) {
+        if (returnType.isAggregate()) {
             // TODO: 完整实现调用 IR 生成时：
             // val retAlloca = builder.createAlloca(returnType, "call_ret")
             // val args = mutableListOf<Value>(retAlloca)
@@ -620,7 +616,7 @@ class ASTLower(
         // 方法调用也需要处理 struct/array 返回 ABI
         // 逻辑与 visitCallExpr 类似
         val returnType = getIRType(context, node.resolvedType)
-        if (isAggregateReturnType(returnType)) {
+        if (returnType.isAggregate()) {
             // TODO: 完整实现时需要：
             // 1. 分配返回缓冲区
             // 2. 将缓冲区指针作为第一个参数传入
