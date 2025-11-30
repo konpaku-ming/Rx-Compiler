@@ -630,14 +630,10 @@ class ASTLower(
         val srcType = node.expr.resolvedType
         val dstType = node.targetResolvedType
 
-        // 检查 char 类型转换 - 不实现
-        if (srcType is PrimitiveResolvedType && srcType.name == "char") {
+        // 不实现 char 类型转换
+        if (srcType == PrimitiveResolvedType("char")) {
             throw IRException("Type cast from char is not supported")
         }
-        if (dstType is PrimitiveResolvedType && dstType.name == "char") {
-            throw IRException("Type cast to char is not supported")
-        }
-
         // 相同类型，直接返回原值
         if (srcType == dstType) {
             node.irValue = srcValue
@@ -646,12 +642,10 @@ class ASTLower(
         }
 
         // 检查源类型是否为 bool
-        val srcIsBool = srcType is PrimitiveResolvedType && srcType.name == "bool"
-
+        val srcIsBool = srcType == PrimitiveResolvedType("bool")
         // 检查目标类型是否为整数类型 (i32/u32/isize/usize)
         val dstIsInteger = dstType is PrimitiveResolvedType &&
                 dstType.name in listOf("i32", "u32", "isize", "usize")
-
         // 检查源类型是否为整数类型 (i32/u32/isize/usize)
         val srcIsInteger = srcType is PrimitiveResolvedType &&
                 srcType.name in listOf("i32", "u32", "isize", "usize")
