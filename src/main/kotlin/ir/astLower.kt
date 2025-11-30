@@ -622,7 +622,58 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
+        // 递归降低被转换的表达式
         node.expr.accept(this)
+        val srcValue = node.expr.irValue
+            ?: throw IRException("Source expression of type cast has no IR value")
+
+        val srcType = node.expr.resolvedType
+        val dstType = node.targetResolvedType
+
+        // 检查 char 类型转换 - 不实现
+        if (srcType is PrimitiveResolvedType && srcType.name == "char") {
+            throw IRException("Type cast from char is not supported")
+        }
+        if (dstType is PrimitiveResolvedType && dstType.name == "char") {
+            throw IRException("Type cast to char is not supported")
+        }
+
+        // 相同类型，直接返回原值
+        if (srcType == dstType) {
+            node.irValue = srcValue
+            scopeTree.currentScope = previousScope
+            return
+        }
+
+        // 检查源类型是否为 bool
+        val srcIsBool = srcType is PrimitiveResolvedType && srcType.name == "bool"
+
+        // 检查目标类型是否为整数类型 (i32/u32/isize/usize)
+        val dstIsInteger = dstType is PrimitiveResolvedType &&
+                dstType.name in listOf("i32", "u32", "isize", "usize")
+
+        // 检查源类型是否为整数类型 (i32/u32/isize/usize)
+        val srcIsInteger = srcType is PrimitiveResolvedType &&
+                srcType.name in listOf("i32", "u32", "isize", "usize")
+
+        when {
+            // bool -> i32/u32/isize/usize: 使用 zext 指令
+            srcIsBool && dstIsInteger -> {
+                val dstIRType = getIRType(context, dstType)
+                val result = builder.createZExt(dstIRType, srcValue)
+                node.irValue = result
+            }
+
+            // i32/u32/isize/usize 之间互转：位宽相同，不需要变换
+            srcIsInteger && dstIsInteger -> {
+                // 位宽都是 32 位，直接使用原值
+                node.irValue = srcValue
+            }
+
+            else -> {
+                throw IRException("Unsupported type cast from ${srcType.name} to ${dstType.name}")
+            }
+        }
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
