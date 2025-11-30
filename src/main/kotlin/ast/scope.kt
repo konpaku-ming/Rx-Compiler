@@ -13,7 +13,7 @@ data class VariableSymbol(
     val type: ResolvedType,
     val isMut: Boolean,
 ) : Symbol() {
-    val value: Value? = null // IR中对应的 alloca 指令，在后续的IR生成阶段会赋值（也有可能为 argument ）
+    var irValue: Value? = null // IR中对应的 alloca 指令，在后续的IR生成阶段会赋值（也有可能为 argument ）
 }
 
 data class SelfParameter(

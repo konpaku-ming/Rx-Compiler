@@ -501,8 +501,11 @@ fun lowerLetStmt(node: LetStmtNode, builder: IRBuilder, context: LLVMContext, mo
         }
     }
     
-    // 记录变量地址到符号表（实际代码中 node.irAddress 已经被设置）
-    // symbolTable["x"] = allocaInst
+    // 将生成的 IR Value 绑定到 VariableSymbol
+    // LetStmtNode 包含一个 symbol 字段，可绑定到所创建的 VariableSymbol
+    // 在 IR 生成阶段，需要把 alloca 的结果（变量的地址）挂到该 symbol 上
+    val variableSymbol = node.symbol as? VariableSymbol
+    variableSymbol?.irValue = allocaInst  // 绑定 IR Value 到 symbol
 }
 ```
 
@@ -1790,6 +1793,92 @@ clang output.s -o output
 
 ---
 
+## LetNode 与 VariableSymbol 的 IR 绑定
+
+在语义分析阶段，`LetStmtNode` 的 `symbol` 字段会绑定到所创建的 `VariableSymbol`。在 IR 生成阶段，需要将分配或初始化得到的 LLVM IR Value 记录到该 `VariableSymbol` 上，以便后续引用使用。
+
+### AST 结构
+
+`LetStmtNode` 包含以下关键字段：
+- `pattern`: 变量名模式（如 `IdentifierPatternNode`）
+- `valueType`: 变量声明的类型
+- `value`: 初始化表达式
+- `symbol`: 绑定到的 `VariableSymbol`（在语义分析阶段设置）
+
+### VariableSymbol 结构
+
+```kotlin
+data class VariableSymbol(
+    override val name: String,
+    val type: ResolvedType,
+    val isMut: Boolean,
+) : Symbol() {
+    var irValue: Value? = null // IR中对应的 alloca 指令或 argument
+}
+```
+
+`irValue` 字段用于存储：
+- 对于局部变量：`alloca` 指令产生的指针
+- 对于函数参数：对应的 `Argument` 值
+
+### 绑定流程
+
+在处理 `LetStmtNode` 时，IR 生成器应该：
+
+1. 为变量分配栈空间（`alloca`）
+2. 根据类型选择初始化策略（标量用 store，聚合用 memcpy）
+3. 将 `alloca` 结果绑定到 `VariableSymbol.irValue`
+
+```kotlin
+// IR 生成示例
+fun lowerLetStmt(node: LetStmtNode, builder: IRBuilder, context: LLVMContext, module: Module) {
+    val varType = getIRType(context, node.variableResolvedType)
+    
+    // 1. 分配栈空间
+    val allocaInst = builder.createAlloca(varType, "x")
+    
+    // 2. 初始化（根据类型选择策略）
+    // ... (标量用 store，结构体/数组用 memcpy)
+    
+    // 3. 绑定 IR Value 到 symbol
+    val variableSymbol = node.symbol as? VariableSymbol
+    variableSymbol?.irValue = allocaInst
+}
+```
+
+### 后续变量引用
+
+当遇到 `PathExprNode` 引用变量时，可以通过 `VariableSymbol.irValue` 获取变量的 IR 地址：
+
+```kotlin
+fun lowerPathExpr(node: PathExprNode, builder: IRBuilder, context: LLVMContext): Value {
+    val symbol = node.symbol
+    if (symbol is VariableSymbol) {
+        val varAddress = symbol.irValue ?: throw IRException("Variable not initialized")
+        val varType = getIRType(context, symbol.type)
+        return builder.createLoad(varType, varAddress, "load_${symbol.name}")
+    }
+    // ... 处理其他类型的 symbol
+}
+```
+
+### 函数参数绑定
+
+对于函数参数，也需要绑定 `irValue`：
+
+```kotlin
+// 在函数入口处，为每个参数创建 alloca 并绑定
+arguments.forEach { arg ->
+    val alloca = builder.createAlloca(arg.type, arg.name)
+    builder.createStore(arg, alloca)
+    // 找到对应的 VariableSymbol 并绑定
+    val paramSymbol = lookupParameter(arg.name)
+    paramSymbol?.irValue = alloca
+}
+```
+
+---
+
 ## 注意事项与检查清单
 
 ### memcpy 使用检查清单
@@ -1799,6 +1888,7 @@ clang output.s -o output
 - [ ] **类型判断**：在 `LetStmtNode` 和 `AssignExprNode` 中正确判断类型是否为结构体或数组
 - [ ] **memcpy 大小参数**：结构体使用 `StructName.size()` 函数获取大小；数组通过元素大小 × 长度计算
 - [ ] **地址获取**：对于结构体和数组，需要获取地址而非值（使用 `lowerExprToAddress` 而非 `lowerExpr`）
+- [ ] **Symbol 绑定**：处理 `LetStmtNode` 时，将 `alloca` 结果绑定到 `VariableSymbol.irValue`
 - [ ] **全局常量引用**：优先使用 `structDefiner.kt` 生成的全局常量进行初始化
 - [ ] **避免 load+store**：结构体和数组复制不要使用 load+store，必须使用 memcpy
 
