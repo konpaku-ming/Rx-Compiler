@@ -22,7 +22,7 @@ data class PrimitiveResolvedType(
 ) : ResolvedType
 
 data class ReferenceResolvedType(
-    val inner: ResolvedType,
+    var inner: ResolvedType,
     val isMut: Boolean
 ) : ResolvedType {
     override val name: String = if (isMut) {
@@ -33,7 +33,7 @@ data class ReferenceResolvedType(
 }
 
 data class ArrayResolvedType(
-    val elementType: ResolvedType,
+    var elementType: ResolvedType,
     val lengthExpr: ExprNode,
 ) : ResolvedType {
     var length: Int = -1 // -1 表示未求值
@@ -4145,7 +4145,7 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             }
 
             is ReferenceResolvedType if receiverType.inner is NamedResolvedType -> {
-                val structSymbol = receiverType.inner.symbol as? StructSymbol
+                val structSymbol = (receiverType.inner as NamedResolvedType).symbol as? StructSymbol
                     ?: throw SemanticException("method receiver should be a struct")
                 val method = structSymbol.methods[methodName]
                     ?: throw SemanticException("undefined method '$methodName'")

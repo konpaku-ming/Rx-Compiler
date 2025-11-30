@@ -10,6 +10,7 @@ import ast.removeComments
 import java.io.File
 import kotlin.system.exitProcess
 import exception.CompilerException
+import ir.IntTypeConfirmer
 import llvm.LLVMContext
 import llvm.Module
 import llvm.IRBuilder
@@ -31,9 +32,9 @@ fun main(args: Array<String>) {
         exitProcess(1)
     }
 
-    println("--- source file ---")
-    println(sourceCode)
-    println("-------------------")
+    // println("--- source file ---")
+    // println(sourceCode)
+    // println("-------------------")
 
     try {
         val lexer = Lexer(removeComments(sourceCode))
@@ -50,12 +51,16 @@ fun main(args: Array<String>) {
         fourthVisitor.visitCrate(node = ast) // 第四次pass
         val fifthVisitor = FifthVisitor(semanticScopeTree)
         fifthVisitor.visitCrate(node = ast) // 第五次pass
+        val intTypeConfirmer = IntTypeConfirmer(semanticScopeTree)
+        intTypeConfirmer.visitCrate(node = ast) // 确认整数类型
 
+        /*
         val context = LLVMContext()
         val module = Module("main", context)
         val builder = IRBuilder(context)
         val structDefiner = StructDefiner(semanticScopeTree, context, module, builder)
         structDefiner.visitCrate(node = ast)
+         */
         /*
                 // 生成LLVM IR
                 println("\n--- generating IR ---")
