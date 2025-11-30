@@ -152,7 +152,7 @@ data class LetStmtNode(
 
     var variableResolvedType: ResolvedType = UnknownResolvedType
 
-    var irAddress: String = "null"
+    var symbol: Symbol? = null // 对应的Symbol，空表示还未创建
 }
 
 data class ExprStmtNode(
@@ -293,14 +293,13 @@ data class PathExprNode(
         visitor.visitPathExpr(this)
     }
 
-    var irAddress: String = "null"
+    var symbol: Symbol? = null // 对应的Symbol，空表示还未绑定
 }
 
 data class BlockExprNode(
     val items: List<ItemNode>, // Block里的items
     val statements: List<StmtNode>, // 非items的语句
     val tailExpr: ExprNode?, // 尾表达式
-    var irAddress: String? = null // 地址，用于返回Block值
 ) : ExprWithBlockNode() {
     override val type: NodeType = NodeType.BlockExpr
 

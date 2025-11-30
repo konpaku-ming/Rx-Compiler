@@ -1946,7 +1946,6 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
                             name = "self",
                             type = functionSymbol.selfParameter.paramType,
                             isMut = functionSymbol.selfParameter.isMut,
-                            irAddress = "param" // 纯信息，表示函数参数而不是变量
                         )
                     )
                 }
@@ -1956,7 +1955,6 @@ class ThirdVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
                             name = parameter.name,
                             type = parameter.paramType,
                             isMut = parameter.isMut,
-                            irAddress = "param" // 纯信息，表示函数参数而不是变量
                         )
                     )
                 }
@@ -2844,9 +2842,6 @@ fun isUnsignedInt(resolvedType: ResolvedType): Boolean {
 }
 
 class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
-    private var varCounter = 1
-
-    fun newVarCount(): String = "${varCounter++}"
 
     fun resolveType(node: TypeNode): ResolvedType {
         when (node) {
@@ -3453,14 +3448,13 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
 
         val pattern = node.pattern
         if (pattern is IdentifierPatternNode) {
-            node.irAddress = "%${pattern.name.value}." + newVarCount()
             val variable = VariableSymbol(
                 name = pattern.name.value,
                 type = resolveType(node.valueType),
                 isMut = pattern.isMut,
-                irAddress = node.irAddress,
             )
             node.variableResolvedType = variable.type // 记录解析的类型，方便类型检查
+            node.symbol = variable // 绑定symbol
             val symbol = scopeTree.lookup(variable.name)
             if (symbol != null && symbol !is VariableSymbol) {
                 throw SemanticException("refutable pattern in local binding")
@@ -3605,11 +3599,15 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         }
         node.resolvedType = when (symbol) {
             is VariableSymbol -> {
-                node.irAddress = symbol.irAddress
+                node.symbol = symbol
                 symbol.type
             }
 
-            is ConstantSymbol -> symbol.type
+            is ConstantSymbol -> {
+                node.symbol = symbol
+                symbol.type
+            }
+
             is VariantSymbol -> symbol.type
             is FunctionSymbol -> UnknownResolvedType
             is StructSymbol -> UnknownResolvedType

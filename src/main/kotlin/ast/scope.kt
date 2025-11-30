@@ -1,6 +1,7 @@
 package ast
 
 import exception.SemanticException
+import llvm.Value
 
 // symbol
 sealed class Symbol {
@@ -11,8 +12,9 @@ data class VariableSymbol(
     override val name: String,
     val type: ResolvedType,
     val isMut: Boolean,
-    val irAddress: String, // IR中的地址，如 %x.1
-) : Symbol()
+) : Symbol() {
+    val value: Value? = null // IR中对应的 alloca 指令，在后续的IR生成阶段会赋值（也有可能为 argument ）
+}
 
 data class SelfParameter(
     val paramType: ResolvedType, // 原始的self类型
@@ -34,7 +36,6 @@ data class FunctionSymbol(
     val isMethod: Boolean,
     val isAssociated: Boolean,
     val isDefined: Boolean = true,
-    var irFnName: String = "null",  // IR中的函数名
 ) : Symbol() {
     override fun toString(): String {
         return "FunctionSymbol(name='$name', returnType='${returnType.name}')"
