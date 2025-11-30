@@ -113,6 +113,14 @@ class ASTLower(
         }
     }
 
+    // Check if type should use zero-extension when widening
+    private fun shouldZeroExtend(type: ResolvedType): Boolean {
+        return when (type) {
+            is PrimitiveResolvedType -> type.name in listOf("u32", "usize", "bool", "char")
+            else -> false
+        }
+    }
+
     override fun visitCrate(node: CrateNode) {
         scopeTree.currentScope = node.scopePosition!!
 
@@ -661,7 +669,7 @@ class ASTLower(
             // 扩宽：选择 sext 或 zext
             srcBitWidth < dstBitWidth -> {
                 // 根据源类型决定使用符号扩展还是零扩展
-                if (isUnsignedType(srcType) || srcType == PrimitiveResolvedType("bool") || srcType == PrimitiveResolvedType("char")) {
+                if (shouldZeroExtend(srcType)) {
                     // 无符号类型、bool、char 使用零扩展
                     builder.createZExt(dstIRType, srcValue)
                 } else {

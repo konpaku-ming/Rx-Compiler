@@ -695,12 +695,13 @@ class ZExtInst(
             is I32Type -> 32
             is I8Type -> 8
             is I1Type -> 1
-            else -> 0
+            else -> throw IRException("Unsupported integer type for ZExtInst operand: ${value.myGetType()}")
         }
         val resultBitWidth = when (type) {
             is I32Type -> 32
             is I8Type -> 8
             is I1Type -> 1
+            else -> throw IRException("Unsupported integer type for ZExtInst result: $type")
         }
         if (resultBitWidth <= valueBitWidth) {
             throw IRException("ZExtInst result must be longer than operand")
@@ -736,12 +737,13 @@ class SExtInst(
             is I32Type -> 32
             is I8Type -> 8
             is I1Type -> 1
-            else -> 0
+            else -> throw IRException("Unsupported integer type for SExtInst operand: ${value.myGetType()}")
         }
         val resultBitWidth = when (type) {
             is I32Type -> 32
             is I8Type -> 8
             is I1Type -> 1
+            else -> throw IRException("Unsupported integer type for SExtInst result: $type")
         }
         if (resultBitWidth <= valueBitWidth) {
             throw IRException("SExtInst result must be longer than operand")
@@ -777,12 +779,13 @@ class TruncInst(
             is I32Type -> 32
             is I8Type -> 8
             is I1Type -> 1
-            else -> 0
+            else -> throw IRException("Unsupported integer type for TruncInst operand: ${value.myGetType()}")
         }
         val resultBitWidth = when (type) {
             is I32Type -> 32
             is I8Type -> 8
             is I1Type -> 1
+            else -> throw IRException("Unsupported integer type for TruncInst result: $type")
         }
         if (resultBitWidth >= valueBitWidth) {
             throw IRException("TruncInst result must be shorter than operand")
