@@ -3,6 +3,7 @@ package ir
 import ast.ASTVisitor
 import ast.ArrayLengthExprNode
 import ast.ArrayListExprNode
+import ast.ArrayResolvedType
 import ast.AssignExprNode
 import ast.BinaryExprNode
 import ast.BlockExprNode
@@ -24,6 +25,8 @@ import ast.EnumItemNode
 import ast.ExprStmtNode
 import ast.FieldExprNode
 import ast.FunctionItemNode
+import ast.FunctionScope
+import ast.FunctionSymbol
 import ast.GroupedExprNode
 import ast.IfExprNode
 import ast.ImplItemNode
@@ -33,6 +36,7 @@ import ast.IntLiteralExprNode
 import ast.LazyBooleanExprNode
 import ast.LetStmtNode
 import ast.MethodCallExprNode
+import ast.NamedResolvedType
 import ast.NegationExprNode
 import ast.PathExprNode
 import ast.PredicateLoopExprNode
@@ -49,7 +53,9 @@ import ast.TypeCastExprNode
 import ast.UnknownResolvedType
 import ast.VariableSymbol
 import exception.IRException
+import llvm.Argument
 import llvm.ArrayType
+import llvm.Function
 import llvm.I1Type
 import llvm.IRBuilder
 import llvm.IntegerType
@@ -61,6 +67,7 @@ import llvm.I32Type
 import llvm.I8Type
 import llvm.PointerType
 import llvm.Value
+import llvm.VoidType
 
 class ASTLower(
     private val scopeTree: ScopeTree,
@@ -68,6 +75,17 @@ class ASTLower(
     private val module: Module,
     private val builder: IRBuilder
 ) : ASTVisitor {
+    // 当前函数的返回缓冲区指针（用于返回 struct/array 的函数）
+    // 如果当前函数返回 struct/array，则此变量保存传入的返回缓冲区指针（第一个参数）
+    // 否则为 null
+    private var currentReturnBufferPtr: Value? = null
+
+    // 判断返回类型是否需要使用 caller-allocated buffer ABI
+    // 结构体和数组类型需要通过指针返回，而非直接通过值返回
+    private fun isAggregateReturnType(returnType: IRType): Boolean {
+        return returnType is StructType || returnType is ArrayType
+    }
+
     private fun getArrayCopySize(arrayType: ArrayType): Value {
         val elementSize = getElementSize(arrayType.elementType)
         val arrayLength = arrayType.numElements
@@ -126,7 +144,39 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!!
 
-        if (node.body != null) visitBlockExpr(node.body, createScope = false)
+        // 获取函数符号以获取返回类型信息
+        val funcScope = node.scopePosition as? FunctionScope
+        val funcSymbol = funcScope?.functionSymbol
+
+        if (funcSymbol != null && node.body != null) {
+            // 获取原始返回类型的 IR 类型
+            val originalReturnType = getIRType(context, funcSymbol.returnType)
+
+            // 检查是否需要使用 struct/array 返回 ABI
+            // 如果返回类型是 struct 或 array，需要：
+            // 1. 将返回类型改为 void
+            // 2. 添加第一个参数作为返回缓冲区指针（caller-allocated）
+            // 3. 在函数体内将结果写入该指针
+            // 4. 最后 ret void
+            if (isAggregateReturnType(originalReturnType)) {
+                // TODO: 完整实现函数 IR 生成时：
+                // - 生成的函数签名：第一个参数为 ptr 类型（返回缓冲区指针）
+                // - 实际返回类型变为 void
+                // - 在函数入口保存 ret_ptr 参数到 currentReturnBufferPtr
+                // - 在 return 语句处，将值写入 currentReturnBufferPtr 并 ret void
+
+                // 当前仅标记并遍历函数体
+                // 保存返回缓冲区指针（实际实现时从第一个参数获取）
+                // currentReturnBufferPtr = firstArgument // 需要在函数 IR 生成时设置
+            }
+
+            visitBlockExpr(node.body, createScope = false)
+
+            // 清理返回缓冲区指针
+            currentReturnBufferPtr = null
+        } else if (node.body != null) {
+            visitBlockExpr(node.body, createScope = false)
+        }
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
@@ -212,8 +262,11 @@ class ASTLower(
                 node.value.accept(this)
                 val srcAddr = node.value.irValue
                     ?: throw IRException("IR Value not initialized in ${node.value}")
-                val sizeFunc = module.myGetFunction("${variableSymbol.name}.size")
-                    ?: throw IRException("missing sizeFunc for struct '$variableSymbol.name'")
+                // 从变量的resolved type获取结构体名称
+                val structName = (node.variableResolvedType as? NamedResolvedType)?.name
+                    ?: throw IRException("LetStmtNode's variableResolvedType is not NamedResolvedType")
+                val sizeFunc = module.myGetFunction("${structName}.size")
+                    ?: throw IRException("missing sizeFunc for struct '$structName'")
                 val size = builder.createCall(sizeFunc, emptyList()) // i32的Value
                 builder.createMemCpy(allocaInst, srcAddr, size, false)
             }
@@ -455,6 +508,31 @@ class ASTLower(
             param.accept(this)
         }
 
+        // 获取调用的返回类型
+        val returnType = getIRType(context, node.resolvedType)
+
+        // 如果返回类型是 struct 或 array，需要使用 caller-allocated buffer ABI：
+        // 1. 调用方在调用前 alloca 一块返回空间
+        // 2. 将该空间的指针作为第一个参数传入
+        // 3. 函数调用返回 void，实际结果写入该缓冲区
+        // 4. 调用结束后，缓冲区指针即为结果的地址
+        if (isAggregateReturnType(returnType)) {
+            // TODO: 完整实现调用 IR 生成时：
+            // val retAlloca = builder.createAlloca(returnType, "call_ret")
+            // val args = mutableListOf<Value>(retAlloca)
+            // args.addAll(loweredArgs) // 添加实际参数
+            // builder.createCall(func, args) // 调用返回 void
+            // node.irValue = retAlloca // 结果位于 retAlloca
+
+            // 当前仅设置 irValue 为 null，表示待实现
+            node.irValue = null
+        } else {
+            // 标量类型直接返回调用结果
+            // TODO: val callResult = builder.createCall(func, loweredArgs, "call_result")
+            // node.irValue = callResult
+            node.irValue = null
+        }
+
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
@@ -465,6 +543,19 @@ class ASTLower(
         node.receiver.accept(this)
         for (param in node.params) {
             param.accept(this)
+        }
+
+        // 方法调用也需要处理 struct/array 返回 ABI
+        // 逻辑与 visitCallExpr 类似
+        val returnType = getIRType(context, node.resolvedType)
+        if (isAggregateReturnType(returnType)) {
+            // TODO: 完整实现时需要：
+            // 1. 分配返回缓冲区
+            // 2. 将缓冲区指针作为第一个参数传入
+            // 3. 调用方法并设置 irValue 为缓冲区指针
+            node.irValue = null
+        } else {
+            node.irValue = null
         }
 
         scopeTree.currentScope = previousScope // 还原scope状态
@@ -511,6 +602,36 @@ class ASTLower(
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
         node.value?.accept(this)
+
+        // 如果当前函数使用 struct/array 返回 ABI（currentReturnBufferPtr 不为空）
+        // 则需要将返回值写入返回缓冲区，而非直接 ret value
+        if (currentReturnBufferPtr != null && node.value != null) {
+            val returnValue = node.value.irValue
+            if (returnValue != null) {
+                val returnType = getIRType(context, node.value.resolvedType)
+                // TODO: 完整实现时：
+                // 1. 如果是 struct，使用 memcpy 将值复制到 currentReturnBufferPtr
+                // 2. 如果是 array，同样使用 memcpy
+                // 3. 然后 ret void
+                // 示例伪代码：
+                // when (returnType) {
+                //     is StructType -> {
+                //         val structName = (node.value.resolvedType as NamedResolvedType).name
+                //         val sizeFunc = module.myGetFunction("$structName.size")!!
+                //         val size = builder.createCall(sizeFunc, emptyList())
+                //         builder.createMemCpy(currentReturnBufferPtr!!, returnValue, size, false)
+                //     }
+                //     is ArrayType -> {
+                //         val size = getArrayCopySize(returnType)
+                //         builder.createMemCpy(currentReturnBufferPtr!!, returnValue, size, false)
+                //     }
+                // }
+                // builder.createRet(null) // ret void
+            }
+        } else {
+            // 标量类型直接返回
+            // TODO: builder.createRet(node.value?.irValue)
+        }
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }

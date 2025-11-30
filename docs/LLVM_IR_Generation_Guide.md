@@ -483,7 +483,8 @@ fun lowerLetStmt(node: LetStmtNode, builder: IRBuilder, context: LLVMContext, mo
         varType is StructType -> {
             // 结构体：使用 memcpy
             val srcAddr = lowerExprToAddress(node.value, builder, context)
-            val structName = varType.name
+            // 从变量的 NamedResolvedType 获取结构体名称
+            val structName = (node.variableResolvedType as NamedResolvedType).name
             val sizeFunc = module.myGetFunction("$structName.size")!!
             val size = builder.createCall(sizeFunc, emptyList(), "size")
             builder.createMemCpy(allocaInst, srcAddr, size, false)
