@@ -48,10 +48,13 @@ import ast.StringLiteralExprNode
 import ast.StructExprNode
 import ast.StructItemNode
 import ast.StructSymbol
+import ast.TokenType
 import ast.TraitItemNode
 import ast.TypeCastExprNode
 import ast.UnknownResolvedType
 import ast.VariableSymbol
+import ast.stringToChar
+import ast.stringToUInt
 import exception.IRException
 import llvm.Argument
 import llvm.ArrayType
@@ -308,14 +311,30 @@ class ASTLower(
     override fun visitIntLiteralExpr(node: IntLiteralExprNode) {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
-        // nothing to do
+        
+        // Convert integer literal to IR constant
+        // Remove any type suffix (e.g., i32, u32, isize, usize) and parse the value
+        val rawValue = node.raw
+            .removeSuffix("i32")
+            .removeSuffix("u32")
+            .removeSuffix("isize")
+            .removeSuffix("usize")
+        val value = stringToUInt(rawValue).toInt()
+        val intConstant = context.myGetIntConstant(context.myGetI32Type(), value)
+        node.irValue = intConstant
+        
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
     override fun visitCharLiteralExpr(node: CharLiteralExprNode) {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
-        // nothing to do
+        
+        // Convert char literal to IR constant (i8)
+        val charValue = stringToChar(node.raw)
+        val charConstant = context.myGetIntConstant(context.myGetI8Type(), charValue.code)
+        node.irValue = charConstant
+        
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
@@ -329,7 +348,12 @@ class ASTLower(
     override fun visitBooleanLiteralExpr(node: BooleanLiteralExprNode) {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
-        // nothing to do
+        
+        // Convert boolean literal to IR constant (i1)
+        val value = if (node.raw == "true") 1 else 0
+        val boolConstant = context.myGetIntConstant(context.myGetI1Type(), value)
+        node.irValue = boolConstant
+        
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
@@ -392,8 +416,32 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
+        // First, lower the operands
         node.left.accept(this)
         node.right.accept(this)
+        
+        // Get the IR values for operands
+        val leftValue = node.left.irValue
+            ?: throw IRException("Left operand of binary expression has no IR value")
+        val rightValue = node.right.irValue
+            ?: throw IRException("Right operand of binary expression has no IR value")
+        
+        // Generate the appropriate binary operation based on operator type
+        val result = when (node.operator.type) {
+            TokenType.Add -> builder.createAdd(leftValue, rightValue)
+            TokenType.SubNegate -> builder.createSub(leftValue, rightValue)
+            TokenType.Mul -> builder.createMul(leftValue, rightValue)
+            TokenType.Div -> builder.createSDiv(leftValue, rightValue)  // Signed division
+            TokenType.Mod -> builder.createSRem(leftValue, rightValue)  // Signed remainder
+            TokenType.BitAnd -> builder.createAnd(leftValue, rightValue)
+            TokenType.BitOr -> builder.createOr(leftValue, rightValue)
+            TokenType.BitXor -> builder.createXor(leftValue, rightValue)
+            TokenType.Shl -> builder.createShl(leftValue, rightValue)
+            TokenType.Shr -> builder.createAShr(leftValue, rightValue)  // Arithmetic right shift
+            else -> throw IRException("Unknown binary operator: ${node.operator.type}")
+        }
+        
+        node.irValue = result
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
@@ -402,8 +450,28 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
+        // First, lower the operands
         node.left.accept(this)
         node.right.accept(this)
+        
+        // Get the IR values for operands
+        val leftValue = node.left.irValue
+            ?: throw IRException("Left operand of comparison expression has no IR value")
+        val rightValue = node.right.irValue
+            ?: throw IRException("Right operand of comparison expression has no IR value")
+        
+        // Generate the appropriate comparison operation based on operator type
+        val result = when (node.operator.type) {
+            TokenType.Eq -> builder.createICmpEQ(leftValue, rightValue)
+            TokenType.Neq -> builder.createICmpNE(leftValue, rightValue)
+            TokenType.Lt -> builder.createICmpSLT(leftValue, rightValue)  // Signed less than
+            TokenType.Le -> builder.createICmpSLE(leftValue, rightValue)  // Signed less than or equal
+            TokenType.Gt -> builder.createICmpSGT(leftValue, rightValue)  // Signed greater than
+            TokenType.Ge -> builder.createICmpSGE(leftValue, rightValue)  // Signed greater than or equal
+            else -> throw IRException("Unknown comparison operator: ${node.operator.type}")
+        }
+        
+        node.irValue = result
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
