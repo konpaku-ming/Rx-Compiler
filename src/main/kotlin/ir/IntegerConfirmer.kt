@@ -67,6 +67,7 @@ import ast.isInt
 import ast.isSignedInt
 import ast.isUnsignedInt
 import exception.IRException
+import exception.SemanticException
 
 class IntegerConfirmer(
     private val scopeTree: ScopeTree,
@@ -427,8 +428,22 @@ class IntegerConfirmer(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
-        node.left.resolvedType = node.resolvedType
-        node.right.resolvedType = node.resolvedType
+        when (node.operator.type) {
+            TokenType.Add, TokenType.SubNegate, TokenType.Mul, TokenType.Div, TokenType.Mod,
+            TokenType.BitAnd, TokenType.BitOr, TokenType.BitXor -> {
+                node.left.resolvedType = node.resolvedType
+                node.right.resolvedType = node.resolvedType
+            }
+
+            TokenType.Shl, TokenType.Shr -> {
+                node.left.resolvedType = node.resolvedType
+            }
+
+            else -> throw SemanticException(
+                "Unsupported binary operator '${node.operator}'"
+            )
+        }
+
         node.left.accept(this)
         node.right.accept(this)
 

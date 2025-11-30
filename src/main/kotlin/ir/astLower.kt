@@ -40,8 +40,10 @@ import ast.NamedResolvedType
 import ast.NegationExprNode
 import ast.PathExprNode
 import ast.PredicateLoopExprNode
+import ast.PrimitiveResolvedType
 import ast.RawCStringLiteralExprNode
 import ast.RawStringLiteralExprNode
+import ast.ResolvedType
 import ast.ReturnExprNode
 import ast.ScopeTree
 import ast.StringLiteralExprNode
@@ -101,6 +103,13 @@ class ASTLower(
             is StructType -> throw IRException("StructType size must be calculated from sizeFunc")
             is ArrayType -> type.numElements * getElementSize(type.elementType)
             else -> throw IRException("Unknown type size: $type")
+        }
+    }
+
+    private fun isUnsignedType(type: ResolvedType): Boolean {
+        return when (type) {
+            is PrimitiveResolvedType -> type.name in listOf("u32", "usize")
+            else -> false
         }
     }
 
@@ -307,7 +316,7 @@ class ASTLower(
     override fun visitIntLiteralExpr(node: IntLiteralExprNode) {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
-        
+
         // Convert integer literal to IR constant
         // Remove type suffix (e.g., i32, u32, isize, usize) and parse the value
         // Following the same pattern as semantic.kt to properly handle suffixes
@@ -322,19 +331,19 @@ class ASTLower(
         val value = stringToUInt(rawValue).toInt()
         val intConstant = context.myGetIntConstant(context.myGetI32Type(), value)
         node.irValue = intConstant
-        
+
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
     override fun visitCharLiteralExpr(node: CharLiteralExprNode) {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
-        
+
         // Convert char literal to IR constant (i8)
         val charValue = stringToChar(node.raw)
         val charConstant = context.myGetIntConstant(context.myGetI8Type(), charValue.code)
         node.irValue = charConstant
-        
+
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
@@ -348,12 +357,12 @@ class ASTLower(
     override fun visitBooleanLiteralExpr(node: BooleanLiteralExprNode) {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
-        
+
         // Convert boolean literal to IR constant (i1)
         val value = if (node.raw == "true") 1 else 0
         val boolConstant = context.myGetIntConstant(context.myGetI1Type(), value)
         node.irValue = boolConstant
-        
+
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
@@ -419,28 +428,47 @@ class ASTLower(
         // First, lower the operands
         node.left.accept(this)
         node.right.accept(this)
-        
-        // Get the IR values for operands
         val leftValue = node.left.irValue
             ?: throw IRException("Left operand of binary expression has no IR value")
         val rightValue = node.right.irValue
             ?: throw IRException("Right operand of binary expression has no IR value")
-        
+
         // Generate the appropriate binary operation based on operator type
         val result = when (node.operator.type) {
             TokenType.Add -> builder.createAdd(leftValue, rightValue)
             TokenType.SubNegate -> builder.createSub(leftValue, rightValue)
             TokenType.Mul -> builder.createMul(leftValue, rightValue)
-            TokenType.Div -> builder.createSDiv(leftValue, rightValue)  // Signed division
-            TokenType.Mod -> builder.createSRem(leftValue, rightValue)  // Signed remainder
+
+            // 除法：根据符号选择指令
+            TokenType.Div -> if (isUnsignedType(node.left.resolvedType)) {
+                builder.createUDiv(leftValue, rightValue)
+            } else {
+                builder.createSDiv(leftValue, rightValue)
+            }
+
+            // 取余：根据符号选择指令
+            TokenType.Mod -> if (isUnsignedType(node.left.resolvedType)) {
+                builder.createURem(leftValue, rightValue)
+            } else {
+                builder.createSRem(leftValue, rightValue)
+            }
+
+            // 右移：根据符号选择指令
+            TokenType.Shr -> if (isUnsignedType(node.left.resolvedType)) {
+                builder.createLShr(leftValue, rightValue)  // 逻辑右移
+            } else {
+                builder.createAShr(leftValue, rightValue)  // 算术右移
+            }
+
+            // 位运算：符号无关
             TokenType.BitAnd -> builder.createAnd(leftValue, rightValue)
             TokenType.BitOr -> builder.createOr(leftValue, rightValue)
             TokenType.BitXor -> builder.createXor(leftValue, rightValue)
             TokenType.Shl -> builder.createShl(leftValue, rightValue)
-            TokenType.Shr -> builder.createAShr(leftValue, rightValue)  // Arithmetic right shift
+
             else -> throw IRException("Unknown binary operator: ${node.operator.type}")
         }
-        
+
         node.irValue = result
 
         scopeTree.currentScope = previousScope // 还原scope状态
@@ -458,18 +486,41 @@ class ASTLower(
             ?: throw IRException("Left operand of comparison expression has no IR value")
         val rightValue = node.right.irValue
             ?: throw IRException("Right operand of comparison expression has no IR value")
-        
+
         // Generate the appropriate comparison operation based on operator type
         val result = when (node.operator.type) {
+            // 相等比较：符号无关
             TokenType.Eq -> builder.createICmpEQ(leftValue, rightValue)
             TokenType.Neq -> builder.createICmpNE(leftValue, rightValue)
-            TokenType.Lt -> builder.createICmpSLT(leftValue, rightValue)  // Signed less than
-            TokenType.Le -> builder.createICmpSLE(leftValue, rightValue)  // Signed less than or equal
-            TokenType.Gt -> builder.createICmpSGT(leftValue, rightValue)  // Signed greater than
-            TokenType.Ge -> builder.createICmpSGE(leftValue, rightValue)  // Signed greater than or equal
+
+            // 不等比较：根据符号选择指令
+            TokenType.Lt -> if (isUnsignedType(node.left.resolvedType)) {
+                builder.createICmpULT(leftValue, rightValue)
+            } else {
+                builder.createICmpSLT(leftValue, rightValue)
+            }
+
+            TokenType.Le -> if (isUnsignedType(node.left.resolvedType)) {
+                builder.createICmpULE(leftValue, rightValue)
+            } else {
+                builder.createICmpSLE(leftValue, rightValue)
+            }
+
+            TokenType.Gt -> if (isUnsignedType(node.left.resolvedType)) {
+                builder.createICmpUGT(leftValue, rightValue)
+            } else {
+                builder.createICmpSGT(leftValue, rightValue)
+            }
+
+            TokenType.Ge -> if (isUnsignedType(node.left.resolvedType)) {
+                builder.createICmpUGE(leftValue, rightValue)
+            } else {
+                builder.createICmpSGE(leftValue, rightValue)
+            }
+
             else -> throw IRException("Unknown comparison operator: ${node.operator.type}")
         }
-        
+
         node.irValue = result
 
         scopeTree.currentScope = previousScope // 还原scope状态

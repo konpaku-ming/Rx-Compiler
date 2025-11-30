@@ -17,9 +17,6 @@ fun getIRType(context: LLVMContext, type: ResolvedType): IRType {
     return when (type) {
         is PrimitiveResolvedType -> {
             when (type) {
-                PrimitiveResolvedType("int"),
-                PrimitiveResolvedType("unsigned int"),
-                PrimitiveResolvedType("signed int"),
                 PrimitiveResolvedType("i32"),
                 PrimitiveResolvedType("u32"),
                 PrimitiveResolvedType("isize"),
