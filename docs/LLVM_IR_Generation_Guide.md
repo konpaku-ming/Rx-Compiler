@@ -251,8 +251,8 @@ getIRType(context, ArrayResolvedType(elementType, lengthExpr))  // -> ArrayType
 在 IR 生成之前，`ir/structDefiner.kt` 中的 `StructDefiner` 类会完成以下预处理工作：
 
 1. **结构体定义**：所有 struct 类型在 IR 中被声明和定义
-2. **全局常量生成**：所有常量被生成为 IR 中的全局常量（global constants）
-3. **大小函数生成**：为每个 struct 生成一个计算该 struct 所占字节大小的函数
+2. **全局常量生成**：所有用 `const` 声明的常量被生成为 IR 中的全局常量（global constants）
+3. **大小函数生成**：为每个 struct 生成一个计算该 struct 所占字节大小的函数（函数名格式为 `${structName}.size`）
 
 ```kotlin
 // structDefiner.kt 生成的内容示例：
@@ -260,12 +260,64 @@ getIRType(context, ArrayResolvedType(elementType, lengthExpr))  // -> ArrayType
 // 1. 结构体类型定义
 // %struct.Point = type { i32, i32 }
 
-// 2. 全局常量
+// 2. 全局常量（必须为 int 类型）
 // @MY_CONST = constant i32 42
 
-// 3. 结构体大小函数（供 memcpy 使用）
-// define i32 @size_Point() { ret i32 8 }
+// 3. 结构体大小函数（供 memcpy 和 alloca 使用）
+// define i32 @Point.size() {
+//   body:
+//     %0 = getelementptr %struct.Point, ptr null, i32 1
+//     %1 = ptrtoint ptr %0 to i32
+//     ret i32 %1
+// }
 ```
+
+### const 全局常量约束
+
+**重要规则**：所有使用 `const` 声明的常量**必须是整数类型（IntegerType）**，即 `i32`、`i8`、`i1` 等类型。
+
+`structDefiner.kt` 在处理 `ConstantItemNode` 时会强制执行此约束：
+
+```kotlin
+// structDefiner.kt 中的实现（visitConstantItem 方法，第 133-136 行）
+val type = getIRType(context, constantSymbol.type) as? IntegerType
+    ?: throw IRException("only support int constant")
+val value = constantSymbol.value as? Int
+    ?: throw IRException("only support int constant")
+```
+
+如果尝试定义非整数类型的常量，将抛出 `IRException` 异常。
+
+#### 合法的常量定义示例
+
+```rust
+// 正确：i32 整数类型常量
+const MAX_SIZE: i32 = 100;
+const BUFFER_LEN: i32 = 1024;
+```
+
+生成的 IR：
+```llvm
+@MAX_SIZE = constant i32 100
+@BUFFER_LEN = constant i32 1024
+```
+
+#### 非法的常量定义示例
+
+```rust
+// 错误：浮点类型不支持（不是 IntegerType）
+const PI: f32 = 3.14;  // 将抛出 IRException
+
+// 错误：结构体类型不支持
+const ORIGIN: Point = Point { x: 0, y: 0 };  // 将抛出 IRException
+
+// 错误：数组类型不支持
+const DATA: [i32; 3] = [1, 2, 3];  // 将抛出 IRException
+```
+
+> **注意**：虽然 `bool` 和 `char` 在 IR 中会被映射为 `I1Type` 和 `I8Type`（属于 `IntegerType`），
+> 但 `constantSymbol.value as? Int` 的检查可能会导致某些情况下的限制。
+> 建议在实际使用中主要使用 `i32` 类型的常量以确保兼容性。
 
 ### memcpy 的使用
 
@@ -288,7 +340,7 @@ declare void @llvm.memcpy.p0.p0.i32(ptr nocapture writeonly, ptr nocapture reado
 fun copyStruct(builder: IRBuilder, context: LLVMContext, module: Module,
                dstPtr: Value, srcPtr: Value, structName: String) {
     // 调用 structDefiner 生成的大小函数获取结构体大小
-    val sizeFunc = module.myGetFunction("size_$structName")
+    val sizeFunc = module.myGetFunction("$structName.size")
         ?: throw IRException("Size function not found for struct: $structName")
     val sizeVal = builder.createCall(sizeFunc, emptyList(), "size")
     
@@ -301,7 +353,7 @@ fun copyStruct(builder: IRBuilder, context: LLVMContext, module: Module,
 
 ```llvm
 ; 复制结构体 Point
-%size = call i32 @size_Point()
+%size = call i32 @Point.size()
 call void @llvm.memcpy.p0.p0.i32(ptr %dst, ptr %src, i32 %size, i1 false)
 ```
 
@@ -325,7 +377,7 @@ fun getElementSize(context: LLVMContext, type: IRType): Int {
         is I32Type -> 4
         is PointerType -> 4  // 32位平台
         is StructType -> {
-            // 调用 size_StructName 函数或根据字段累加
+            // 调用 StructName.size() 函数或根据字段累加
             type.elements.sumOf { getElementSize(context, it) }
         }
         is ArrayType -> type.numElements * getElementSize(context, type.elementType)
@@ -354,7 +406,7 @@ fun initializeFromGlobalConstant(builder: IRBuilder, context: LLVMContext,
 生成的 IR：
 ```llvm
 ; 假设 @const_Point_0 是预生成的全局常量
-%size = call i32 @size_Point()
+%size = call i32 @Point.size()
 call void @llvm.memcpy.p0.p0.i32(ptr %local_point, ptr @const_Point_0, i32 %size, i1 false)
 ```
 
@@ -432,7 +484,7 @@ fun lowerLetStmt(node: LetStmtNode, builder: IRBuilder, context: LLVMContext, mo
             // 结构体：使用 memcpy
             val srcAddr = lowerExprToAddress(node.value, builder, context)
             val structName = varType.name
-            val sizeFunc = module.myGetFunction("size_$structName")!!
+            val sizeFunc = module.myGetFunction("$structName.size")!!
             val size = builder.createCall(sizeFunc, emptyList(), "size")
             builder.createMemCpy(allocaInst, srcAddr, size, false)
         }
@@ -466,7 +518,7 @@ store i32 10, ptr %x
 ; let p: Point = Point { x: 1, y: 2 };
 %p = alloca %struct.Point
 ; 假设右侧表达式地址为 %tmp.struct
-%size = call i32 @size_Point()
+%size = call i32 @Point.size()
 call void @llvm.memcpy.p0.p0.i32(ptr %p, ptr %tmp.struct, i32 %size, i1 false)
 ```
 
@@ -475,7 +527,7 @@ call void @llvm.memcpy.p0.p0.i32(ptr %p, ptr %tmp.struct, i32 %size, i1 false)
 ; 如果初始化值是常量，可以直接从全局常量复制
 ; let p: Point = CONST_POINT;
 %p = alloca %struct.Point
-%size = call i32 @size_Point()
+%size = call i32 @Point.size()
 call void @llvm.memcpy.p0.p0.i32(ptr %p, ptr @CONST_POINT, i32 %size, i1 false)
 ```
 
@@ -519,7 +571,7 @@ fun lowerAssignExpr(node: AssignExprNode, builder: IRBuilder, context: LLVMConte
             // 结构体：使用 memcpy
             val srcPtr = lowerExprToAddress(node.right, builder, context)
             val structName = assignType.name
-            val sizeFunc = module.myGetFunction("size_$structName")!!
+            val sizeFunc = module.myGetFunction("$structName.size")!!
             val size = builder.createCall(sizeFunc, emptyList(), "size")
             builder.createMemCpy(dstPtr, srcPtr, size, false)
         }
@@ -550,7 +602,7 @@ store i32 20, ptr %x
 #### 结构体赋值生成的 IR
 ```llvm
 ; p = other_point;
-%size = call i32 @size_Point()
+%size = call i32 @Point.size()
 call void @llvm.memcpy.p0.p0.i32(ptr %p, ptr %other_point, i32 %size, i1 false)
 ```
 
@@ -937,6 +989,218 @@ fun lowerFunctionItem(
 }
 ```
 
+### 返回结构体或数组的函数调用约定
+
+**重要规则**：当函数的返回值类型为结构体（struct）或数组（array）时，不能直接通过值返回，而必须通过指针的方式返回。
+
+#### 调用约定说明
+
+1. **调用方责任**：在调用函数之前，调用方需要使用 `alloca` 分配一段用于存放返回值的空间
+2. **函数签名变更**：函数的第一个参数变为指向返回空间的指针，原有参数依次后移
+3. **函数返回类型变更**：函数返回类型变为 `void`
+4. **函数内部责任**：函数在第一个参数指针指向的空间中写入数据，最后执行 `ret void`
+
+#### 函数定义示例
+
+**原始形式**（不支持直接值返回）：
+```rust
+// 假设语义上返回一个 Point 结构体
+fn createPoint(x: i32, y: i32) -> Point {
+    Point { x: x, y: y }
+}
+```
+
+**转换后的 IR 形式**：
+```llvm
+; 函数签名：第一个参数为返回空间指针，返回类型为 void
+define void @createPoint(ptr %ret_ptr, i32 %x, i32 %y) {
+entry:
+    ; 获取结构体字段的地址并写入数据
+    %field_x = getelementptr %struct.Point, ptr %ret_ptr, i32 0, i32 0
+    store i32 %x, ptr %field_x
+    %field_y = getelementptr %struct.Point, ptr %ret_ptr, i32 0, i32 1
+    store i32 %y, ptr %field_y
+    ; 返回 void
+    ret void
+}
+```
+
+#### 调用方示例
+
+```llvm
+; 调用方先分配空间，再调用函数
+%result = alloca %struct.Point
+call void @createPoint(ptr %result, i32 10, i32 20)
+; 现在 %result 指向包含有效数据的 Point 结构体
+```
+
+#### 使用 size 函数确定分配大小
+
+对于动态情况或需要使用 malloc 分配的场景，可以调用 `structDefiner.kt` 生成的 size 函数：
+
+```llvm
+; 获取结构体大小
+%size = call i32 @Point.size()
+; 使用 malloc 分配（如果需要堆分配）
+%mem = call ptr @malloc(i32 %size)
+; 调用函数
+call void @createPoint(ptr %mem, i32 10, i32 20)
+```
+
+或者直接使用 alloca（栈分配，推荐用于已知类型）：
+```llvm
+; 直接使用类型进行 alloca（编译器已知大小）
+%result = alloca %struct.Point
+call void @createPoint(ptr %result, i32 10, i32 20)
+```
+
+#### 返回数组的函数
+
+数组返回遵循相同的约定：
+
+```rust
+// 假设语义上返回一个 [i32; 3] 数组
+fn makeArray(a: i32, b: i32, c: i32) -> [i32; 3] {
+    [a, b, c]
+}
+```
+
+转换后的 IR：
+```llvm
+define void @makeArray(ptr %out_ptr, i32 %a, i32 %b, i32 %c) {
+entry:
+    %elem0 = getelementptr [3 x i32], ptr %out_ptr, i32 0, i32 0
+    store i32 %a, ptr %elem0
+    %elem1 = getelementptr [3 x i32], ptr %out_ptr, i32 0, i32 1
+    store i32 %b, ptr %elem1
+    %elem2 = getelementptr [3 x i32], ptr %out_ptr, i32 0, i32 2
+    store i32 %c, ptr %elem2
+    ret void
+}
+```
+
+调用方：
+```llvm
+%arr = alloca [3 x i32]
+call void @makeArray(ptr %arr, i32 1, i32 2, i32 3)
+; 现在 %arr 指向包含 [1, 2, 3] 的数组
+```
+
+#### 代码生成伪代码
+
+在实现函数返回结构体/数组的代码生成时，需要进行以下转换：
+
+```kotlin
+// 伪代码示例 - 展示转换逻辑的核心思路
+// 注意：实际实现可能需要根据具体的 AST 结构和类型解析器进行调整
+fun lowerFunctionItemWithAggregateReturn(
+    node: FunctionItemNode,
+    module: Module,
+    context: LLVMContext,
+    typeResolver: TypeResolver  // 类型解析器，用于解析 AST 类型到 IR 类型
+) {
+    val builder = IRBuilder(context)
+    
+    // 1. 获取原始返回类型
+    val originalReturnType = if (node.returnType != null) {
+        getIRType(context, typeResolver.resolveType(node.returnType))
+    } else {
+        context.myGetVoidType()
+    }
+    
+    // 2. 判断是否需要转换为指针返回
+    val isAggregateReturn = originalReturnType is StructType || originalReturnType is ArrayType
+    
+    // 3. 构建参数类型列表
+    val paramTypes = mutableListOf<IRType>()
+    if (isAggregateReturn) {
+        // 第一个参数为返回空间指针
+        paramTypes.add(context.myGetPointerType())
+    }
+    node.params.forEach { param ->
+        paramTypes.add(getIRType(context, typeResolver.resolveType(param.type)))
+    }
+    
+    // 4. 确定实际返回类型
+    val actualReturnType = if (isAggregateReturn) {
+        context.myGetVoidType()
+    } else {
+        originalReturnType
+    }
+    
+    // 5. 创建函数
+    val funcType = context.myGetFunctionType(actualReturnType, paramTypes)
+    val func = module.createFunction(node.fnName.value, funcType)
+    
+    // 6. 设置参数（如果是聚合返回，第一个参数是返回指针）
+    // 注意：Argument 的构造方式可能因具体 LLVM 封装而异
+    val arguments = mutableListOf<Argument>()
+    if (isAggregateReturn) {
+        arguments.add(Argument("ret_ptr", context.myGetPointerType(), func))
+    }
+    node.params.forEachIndexed { i, param ->
+        val pattern = param.paramPattern as IdentifierPatternNode
+        val paramType = paramTypes[if (isAggregateReturn) i + 1 else i]
+        arguments.add(Argument(pattern.name.value, paramType, func))
+    }
+    func.setArguments(arguments)
+    
+    // 7. 生成函数体（省略详细实现）
+    // ...
+    
+    // 8. 如果是聚合返回，在返回点写入数据并 ret void
+    if (isAggregateReturn) {
+        // 将计算结果写入 ret_ptr 指向的空间
+        // builder.createMemCpy(retPtrArg, resultAddr, size, false)
+        builder.createRet(null)  // ret void
+    }
+}
+```
+
+#### 调用点转换
+
+调用返回聚合类型的函数时，需要进行相应转换：
+
+```kotlin
+fun lowerCallExprWithAggregateReturn(
+    node: CallExprNode,
+    builder: IRBuilder,
+    context: LLVMContext,
+    module: Module
+): Value {
+    val func = module.myGetFunction(funcName)!!
+    val returnType = getIRType(context, node.resolvedType)
+    
+    if (returnType is StructType || returnType is ArrayType) {
+        // 1. 分配返回空间
+        val retAlloca = builder.createAlloca(returnType, "call_ret")
+        
+        // 2. 构建参数列表（第一个参数为返回指针）
+        val args = mutableListOf<Value>(retAlloca)
+        node.params.forEach { param ->
+            args.add(lowerExpr(param, builder, context))
+        }
+        
+        // 3. 调用函数（返回 void）
+        builder.createCall(func, args)
+        
+        // 4. 返回指向结果的指针
+        return retAlloca
+    } else {
+        // 标量返回，正常调用
+        val args = node.params.map { lowerExpr(it, builder, context) }
+        return builder.createCall(func, args, "call_result")
+    }
+}
+```
+
+#### 注意事项
+
+1. **栈空间限制**：使用 `alloca` 分配大型结构体或数组时需注意栈空间限制。对于非常大的数据，考虑使用堆分配（malloc）
+2. **ABI 兼容性**：修改函数签名会影响所有调用该函数的代码，需确保调用点同步更新
+3. **递归调用**：递归函数返回聚合类型时，每次递归调用都会分配新的栈空间，需注意栈深度
+4. **跨模块调用**：如果函数被其他模块调用，需确保所有模块使用相同的调用约定
+
 ### CallExprNode（函数调用）
 
 ```kotlin
@@ -1058,7 +1322,7 @@ fun lowerConstStructExpr(
     val globalConst = module.myGetGlobalVariable(globalConstName)!!
     
     // 使用 memcpy 复制
-    val sizeFunc = module.myGetFunction("size_$structName")!!
+    val sizeFunc = module.myGetFunction("$structName.size")!!
     val size = builder.createCall(sizeFunc, emptyList(), "size")
     builder.createMemCpy(alloca, globalConst, size, false)
     
@@ -1069,7 +1333,7 @@ fun lowerConstStructExpr(
 生成的 IR（使用全局常量）：
 ```llvm
 %struct_tmp = alloca %struct.Point
-%size = call i32 @size_Point()
+%size = call i32 @Point.size()
 call void @llvm.memcpy.p0.p0.i32(ptr %struct_tmp, ptr @const_Point_0, i32 %size, i1 false)
 ```
 ```
@@ -1533,7 +1797,7 @@ clang output.s -o output
 在实现代码生成时，请确保以下几点：
 
 - [ ] **类型判断**：在 `LetStmtNode` 和 `AssignExprNode` 中正确判断类型是否为结构体或数组
-- [ ] **memcpy 大小参数**：结构体使用 `size_StructName()` 函数获取大小；数组通过元素大小 × 长度计算
+- [ ] **memcpy 大小参数**：结构体使用 `StructName.size()` 函数获取大小；数组通过元素大小 × 长度计算
 - [ ] **地址获取**：对于结构体和数组，需要获取地址而非值（使用 `lowerExprToAddress` 而非 `lowerExpr`）
 - [ ] **全局常量引用**：优先使用 `structDefiner.kt` 生成的全局常量进行初始化
 - [ ] **避免 load+store**：结构体和数组复制不要使用 load+store，必须使用 memcpy
@@ -1579,7 +1843,7 @@ clang output.s -o output
    val size = context.myGetIntConstant(context.myGetI32Type(), 8)
    
    // 正确：调用 size 函数
-   val sizeFunc = module.myGetFunction("size_Point")!!
+   val sizeFunc = module.myGetFunction("Point.size")!!
    val size = builder.createCall(sizeFunc, emptyList(), "size")
    ```
 
