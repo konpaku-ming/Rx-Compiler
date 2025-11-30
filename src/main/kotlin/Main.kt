@@ -10,11 +10,11 @@ import ast.removeComments
 import java.io.File
 import kotlin.system.exitProcess
 import exception.CompilerException
-import ir.IntTypeConfirmer
+import ir.StructDefiner
+import ir.IntegerConfirmer
 import llvm.LLVMContext
 import llvm.Module
 import llvm.IRBuilder
-import ir.StructDefiner
 
 fun main(args: Array<String>) {
     if (args.size != 1) {
@@ -51,16 +51,15 @@ fun main(args: Array<String>) {
         fourthVisitor.visitCrate(node = ast) // 第四次pass
         val fifthVisitor = FifthVisitor(semanticScopeTree)
         fifthVisitor.visitCrate(node = ast) // 第五次pass
-        val intTypeConfirmer = IntTypeConfirmer(semanticScopeTree)
+        val intTypeConfirmer = IntegerConfirmer(semanticScopeTree)
         intTypeConfirmer.visitCrate(node = ast) // 确认整数类型
 
-        /*
         val context = LLVMContext()
         val module = Module("main", context)
         val builder = IRBuilder(context)
         val structDefiner = StructDefiner(semanticScopeTree, context, module, builder)
         structDefiner.visitCrate(node = ast)
-         */
+
         /*
                 // 生成LLVM IR
                 println("\n--- generating IR ---")

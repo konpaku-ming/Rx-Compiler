@@ -68,7 +68,7 @@ import ast.isSignedInt
 import ast.isUnsignedInt
 import exception.IRException
 
-class IntTypeConfirmer(
+class IntegerConfirmer(
     private val scopeTree: ScopeTree,
 ) : ASTVisitor {
     fun resolvePath(path: PathExprNode): Symbol {
