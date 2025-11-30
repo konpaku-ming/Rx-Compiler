@@ -313,12 +313,16 @@ class ASTLower(
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
         
         // Convert integer literal to IR constant
-        // Remove any type suffix (e.g., i32, u32, isize, usize) and parse the value
-        val rawValue = node.raw
-            .removeSuffix("i32")
-            .removeSuffix("u32")
-            .removeSuffix("isize")
-            .removeSuffix("usize")
+        // Remove type suffix (e.g., i32, u32, isize, usize) and parse the value
+        // Following the same pattern as semantic.kt to properly handle suffixes
+        val rawValue = when {
+            node.raw.endsWith("isize") -> node.raw.removeSuffix("isize")
+            node.raw.endsWith("usize") -> node.raw.removeSuffix("usize")
+            node.raw.endsWith("i32") -> node.raw.removeSuffix("i32")
+            node.raw.endsWith("u32") -> node.raw.removeSuffix("u32")
+            else -> node.raw
+        }
+        // Semantic analysis already validates bounds, so we can safely parse here
         val value = stringToUInt(rawValue).toInt()
         val intConstant = context.myGetIntConstant(context.myGetI32Type(), value)
         node.irValue = intConstant
