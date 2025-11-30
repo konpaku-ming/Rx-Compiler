@@ -12,6 +12,8 @@ class IRBuilder(val context: LLVMContext) {
         return "tmp.${regCounter++}"
     }
 
+    fun myGetInsertBlock(): BasicBlock? = insertBlock  // 获取当前基本块
+
     private fun createBinaryOp(lhs: Value, rhs: Value, name: String, opName: String): BinaryOperator {
         if (insertBlock == null) {
             throw IRException("No insert block")
@@ -244,6 +246,26 @@ class IRBuilder(val context: LLVMContext) {
         val zExt = ZExtInst(actualName, type, value)
         insertBlock!!.addInstruction(zExt)
         return zExt
+    }
+
+    fun createSExt(type: IRType, value: Value, name: String = ""): SExtInst {
+        if (insertBlock == null) {
+            throw IRException("No insert block")
+        }
+        val actualName = name.ifEmpty { genLLVMReg() }
+        val sExt = SExtInst(actualName, type, value)
+        insertBlock!!.addInstruction(sExt)
+        return sExt
+    }
+
+    fun createTrunc(type: IRType, value: Value, name: String = ""): TruncInst {
+        if (insertBlock == null) {
+            throw IRException("No insert block")
+        }
+        val actualName = name.ifEmpty { genLLVMReg() }
+        val trunc = TruncInst(actualName, type, value)
+        insertBlock!!.addInstruction(trunc)
+        return trunc
     }
 
     fun createGEP(baseType: IRType, ptr: Value, indices: List<Value>, name: String = ""): GetElementPtrInst {

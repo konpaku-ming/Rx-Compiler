@@ -530,8 +530,98 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
+        // 短路布尔表达式的实现：
+        // 对于 && (AND): 如果左侧为 false，直接返回 false，不求值右侧
+        // 对于 || (OR): 如果左侧为 true，直接返回 true，不求值右侧
+        //
+        // 生成的控制流：
+        // entry:
+        //   %left = ... (求值左表达式)
+        //   br i1 %left, label %eval_right_or_short, label %short_or_eval_right
+        // eval_right (仅当需要求值右侧时):
+        //   %right = ... (求值右表达式)
+        //   br label %merge
+        // merge:
+        //   %result = phi i1 [%short_result, %entry], [%right, %eval_right]
+
+        // 首先求值左侧表达式
         node.left.accept(this)
-        node.right.accept(this)
+        val leftValue = node.left.irValue
+            ?: throw IRException("Left operand of lazy boolean expression has no IR value")
+
+        // 获取当前函数以创建新的基本块
+        val currentFunc = builder.myGetInsertFunction()
+        if (currentFunc == null) {
+            // 如果没有当前函数（可能是常量求值上下文），则简单求值两侧
+            node.right.accept(this)
+            val rightValue = node.right.irValue
+                ?: throw IRException("Right operand of lazy boolean expression has no IR value")
+
+            // 使用位运算作为后备方案
+            val result = when (node.operator.type) {
+                TokenType.And -> builder.createAnd(leftValue, rightValue)
+                TokenType.Or -> builder.createOr(leftValue, rightValue)
+                else -> throw IRException("Unknown lazy boolean operator: ${node.operator.type}")
+            }
+            node.irValue = result
+        } else {
+            // 记录短路分支的来源块（当前块，在创建条件分支之前获取）
+            val shortCircuitBB = builder.myGetInsertBlock()
+                ?: throw IRException("Cannot get current basic block")
+
+            // 创建基本块用于短路求值
+            val evalRightBB = currentFunc.createBasicBlock("lazy_eval_right")
+            val mergeBB = currentFunc.createBasicBlock("lazy_merge")
+
+            // 根据操作符类型决定短路逻辑
+            when (node.operator.type) {
+                TokenType.And -> {
+                    // AND: 左侧为 true 时求值右侧，否则短路返回 false
+                    builder.createCondBr(leftValue, evalRightBB, mergeBB)
+                }
+                TokenType.Or -> {
+                    // OR: 左侧为 false 时求值右侧，否则短路返回 true
+                    builder.createCondBr(leftValue, mergeBB, evalRightBB)
+                }
+                else -> throw IRException("Unknown lazy boolean operator: ${node.operator.type}")
+            }
+
+            // 设置插入点到 eval_right 块，求值右侧表达式
+            builder.setInsertPoint(evalRightBB)
+            node.right.accept(this)
+            val rightValue = node.right.irValue
+                ?: throw IRException("Right operand of lazy boolean expression has no IR value")
+
+            // 跳转到合并块
+            builder.createBr(mergeBB)
+
+            // 记录求值右侧后的块（可能与 evalRightBB 不同，如果右侧表达式创建了新块）
+            val evalRightEndBB = builder.myGetInsertBlock()
+                ?: evalRightBB
+
+            // 设置插入点到合并块，创建 PHI 节点
+            builder.setInsertPoint(mergeBB)
+            val phi = builder.createPHI(context.myGetI1Type())
+
+            // 添加 PHI 的输入值
+            when (node.operator.type) {
+                TokenType.And -> {
+                    // AND 短路: 左侧为 false 时结果为 false
+                    val falseConst = context.myGetIntConstant(context.myGetI1Type(), 0)
+                    phi.addIncoming(falseConst, shortCircuitBB)
+                    phi.addIncoming(rightValue, evalRightEndBB)
+                }
+                TokenType.Or -> {
+                    // OR 短路: 左侧为 true 时结果为 true
+                    val trueConst = context.myGetIntConstant(context.myGetI1Type(), 1)
+                    phi.addIncoming(trueConst, shortCircuitBB)
+                    phi.addIncoming(rightValue, evalRightEndBB)
+                }
+                else -> throw IRException("Unknown lazy boolean operator: ${node.operator.type}")
+            }
+
+            node.irValue = phi
+        }
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
@@ -540,9 +630,63 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
+        // 首先求值源表达式
         node.expr.accept(this)
+        val srcValue = node.expr.irValue
+            ?: throw IRException("Source expression of type cast has no IR value")
+
+        val srcType = node.expr.resolvedType
+        val dstType = node.targetResolvedType
+
+        // 获取源类型和目标类型的 IR 类型
+        val srcIRType = getIRType(context, srcType)
+        val dstIRType = getIRType(context, dstType)
+
+        // 如果类型相同，直接使用源值
+        if (srcIRType == dstIRType) {
+            node.irValue = srcValue
+            scopeTree.currentScope = previousScope
+            return
+        }
+
+        // 获取类型的位宽
+        val srcBitWidth = getBitWidth(srcIRType)
+        val dstBitWidth = getBitWidth(dstIRType)
+
+        // 类型转换逻辑
+        val result = when {
+            // 相同位宽：有符号/无符号之间的转换是 no-op（位模式不变）
+            srcBitWidth == dstBitWidth -> srcValue
+
+            // 扩宽：选择 sext 或 zext
+            srcBitWidth < dstBitWidth -> {
+                // 根据源类型决定使用符号扩展还是零扩展
+                if (isUnsignedType(srcType) || srcType == PrimitiveResolvedType("bool") || srcType == PrimitiveResolvedType("char")) {
+                    // 无符号类型、bool、char 使用零扩展
+                    builder.createZExt(dstIRType, srcValue)
+                } else {
+                    // 有符号类型使用符号扩展
+                    builder.createSExt(dstIRType, srcValue)
+                }
+            }
+
+            // 缩窄：使用 trunc
+            else -> builder.createTrunc(dstIRType, srcValue)
+        }
+
+        node.irValue = result
 
         scopeTree.currentScope = previousScope // 还原scope状态
+    }
+
+    // 获取整数类型的位宽
+    private fun getBitWidth(type: IRType): Int {
+        return when (type) {
+            is I32Type -> 32
+            is I8Type -> 8
+            is I1Type -> 1
+            else -> throw IRException("Cannot get bit width for non-integer type: $type")
+        }
     }
 
     override fun visitAssignExpr(node: AssignExprNode) {

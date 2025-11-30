@@ -696,10 +696,124 @@ fn test_unsigned_extension() {
 
 ## 附录：相关代码位置
 
-| 文件 | 位置 | 需要修改 |
+| 文件 | 位置 | 状态 |
 |------|------|----------|
 | `ir/typeConverter.kt` | 类型转换 | 可选：保留符号信息 |
-| `ir/astLower.kt:visitBinaryExpr` | 二元运算生成 | 必须：选择正确指令 |
-| `ir/astLower.kt:visitComparisonExpr` | 比较运算生成 | 必须：选择正确指令 |
-| `ir/astLower.kt:visitTypeCastExpr` | 类型转换生成 | 必须：选择正确扩展 |
-| `llvm/irBuilder.kt` | 指令构建器 | 已完成：已有无符号变体 |
+| `ir/astLower.kt:visitBinaryExpr` | 二元运算生成 | ✓ 已完成：根据 isUnsignedType 选择正确指令 |
+| `ir/astLower.kt:visitComparisonExpr` | 比较运算生成 | ✓ 已完成：根据 isUnsignedType 选择正确指令 |
+| `ir/astLower.kt:visitTypeCastExpr` | 类型转换生成 | ✓ 已完成：根据符号选择 sext/zext/trunc |
+| `ir/astLower.kt:visitLazyBooleanExpr` | 短路布尔运算 | ✓ 已完成：使用控制流实现短路求值 |
+| `llvm/irBuilder.kt` | 指令构建器 | ✓ 已完成：新增 createSExt、createTrunc |
+| `llvm/irComponents.kt` | 指令定义 | ✓ 已完成：新增 SExtInst、TruncInst |
+
+---
+
+## 新增实现说明
+
+### visitLazyBooleanExpr 实现
+
+短路布尔表达式（`&&` 和 `||`）的实现使用了控制流来保证短路语义：
+
+#### AND 运算符 (`&&`)
+- 如果左侧为 `false`，直接返回 `false`，不求值右侧
+- 如果左侧为 `true`，求值右侧并返回其结果
+
+```llvm
+; a && b 的生成代码
+entry:
+  %left = ...  ; 求值左表达式
+  br i1 %left, label %eval_right, label %merge
+
+eval_right:
+  %right = ...  ; 求值右表达式
+  br label %merge
+
+merge:
+  %result = phi i1 [ false, %entry ], [ %right, %eval_right ]
+```
+
+#### OR 运算符 (`||`)
+- 如果左侧为 `true`，直接返回 `true`，不求值右侧
+- 如果左侧为 `false`，求值右侧并返回其结果
+
+```llvm
+; a || b 的生成代码
+entry:
+  %left = ...  ; 求值左表达式
+  br i1 %left, label %merge, label %eval_right
+
+eval_right:
+  %right = ...  ; 求值右表达式
+  br label %merge
+
+merge:
+  %result = phi i1 [ true, %entry ], [ %right, %eval_right ]
+```
+
+### visitTypeCastExpr 实现
+
+类型转换根据源类型和目标类型的关系选择正确的指令：
+
+| 转换类型 | 条件 | 指令 | 说明 |
+|----------|------|------|------|
+| 相同类型 | srcType == dstType | 无 | 直接使用源值 |
+| 相同位宽 | srcBitWidth == dstBitWidth | 无 | 位模式不变（reinterpret） |
+| 扩宽（无符号） | srcBitWidth < dstBitWidth && unsigned | `zext` | 零扩展 |
+| 扩宽（有符号） | srcBitWidth < dstBitWidth && signed | `sext` | 符号扩展 |
+| 缩窄 | srcBitWidth > dstBitWidth | `trunc` | 截断高位 |
+
+#### 符号判定规则
+
+- **无符号类型**：`u32`、`usize`、`bool`、`char`
+  - 使用 `zext` 进行扩宽
+- **有符号类型**：`i32`、`isize`
+  - 使用 `sext` 进行扩宽
+
+#### 示例代码
+
+```kotlin
+// 扩宽：根据源类型决定使用符号扩展还是零扩展
+if (isUnsignedType(srcType) || srcType == PrimitiveResolvedType("bool") 
+    || srcType == PrimitiveResolvedType("char")) {
+    // 无符号类型、bool、char 使用零扩展
+    builder.createZExt(dstIRType, srcValue)
+} else {
+    // 有符号类型使用符号扩展
+    builder.createSExt(dstIRType, srcValue)
+}
+
+// 缩窄：始终使用截断
+builder.createTrunc(dstIRType, srcValue)
+```
+
+### 新增指令
+
+#### SExtInst（符号扩展）
+
+```kotlin
+class SExtInst(
+    private val name: String,
+    private val type: IRType,   // 结果类型
+    private val value: Value    // 被扩展的值
+) : Instruction()
+```
+
+生成的 LLVM IR：
+```llvm
+%result = sext i8 %value to i32
+```
+
+#### TruncInst（截断）
+
+```kotlin
+class TruncInst(
+    private val name: String,
+    private val type: IRType,   // 结果类型
+    private val value: Value    // 被截断的值
+) : Instruction()
+```
+
+生成的 LLVM IR：
+```llvm
+%result = trunc i32 %value to i8
+```

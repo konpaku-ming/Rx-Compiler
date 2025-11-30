@@ -721,6 +721,88 @@ class ZExtInst(
     }
 }
 
+class SExtInst(
+    private val name: String, // 指令对应 Value 的名称
+    private val type: IRType,   // 结果类型（较大整数类型）
+    private val value: Value  // 被扩充的整数操作数
+) : Instruction() {
+    init {
+        // 检查操作数和结果类型是否均为整数类型
+        if (value.myGetType() !is IntegerType || type !is IntegerType) {
+            throw IRException("SExtInst operand and result types must be of integer type")
+        }
+        // 结果类型位数应大于操作数类型位数
+        val valueBitWidth = when (value.myGetType()) {
+            is I32Type -> 32
+            is I8Type -> 8
+            is I1Type -> 1
+            else -> 0
+        }
+        val resultBitWidth = when (type) {
+            is I32Type -> 32
+            is I8Type -> 8
+            is I1Type -> 1
+        }
+        if (resultBitWidth <= valueBitWidth) {
+            throw IRException("SExtInst result must be longer than operand")
+        }
+        addOperand(value)
+    }
+
+    override fun myGetType(): IRType {
+        return type
+    }
+
+    override fun myGetName(): String {
+        return "%$name"
+    }
+
+    override fun toString(): String {
+        return "%$name = sext ${value.myGetType()} ${value.myGetName()} to $type"
+    }
+}
+
+class TruncInst(
+    private val name: String, // 指令对应 Value 的名称
+    private val type: IRType,   // 结果类型（较小整数类型）
+    private val value: Value  // 被截断的整数操作数
+) : Instruction() {
+    init {
+        // 检查操作数和结果类型是否均为整数类型
+        if (value.myGetType() !is IntegerType || type !is IntegerType) {
+            throw IRException("TruncInst operand and result types must be of integer type")
+        }
+        // 结果类型位数应小于操作数类型位数
+        val valueBitWidth = when (value.myGetType()) {
+            is I32Type -> 32
+            is I8Type -> 8
+            is I1Type -> 1
+            else -> 0
+        }
+        val resultBitWidth = when (type) {
+            is I32Type -> 32
+            is I8Type -> 8
+            is I1Type -> 1
+        }
+        if (resultBitWidth >= valueBitWidth) {
+            throw IRException("TruncInst result must be shorter than operand")
+        }
+        addOperand(value)
+    }
+
+    override fun myGetType(): IRType {
+        return type
+    }
+
+    override fun myGetName(): String {
+        return "%$name"
+    }
+
+    override fun toString(): String {
+        return "%$name = trunc ${value.myGetType()} ${value.myGetName()} to $type"
+    }
+}
+
 // 地址计算指令
 class GetElementPtrInst(
     val name: String, // 指令对应 Value 的名称
