@@ -450,10 +450,9 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
-        // First, lower the operands
         node.left.accept(this)
         node.right.accept(this)
-        
+
         // Get the IR values for operands
         val leftValue = node.left.irValue
             ?: throw IRException("Left operand of comparison expression has no IR value")
