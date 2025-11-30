@@ -46,6 +46,8 @@ class IRBuilder(val context: LLVMContext) {
         insertBlock = point
     }
 
+    fun myGetInsertBlock(): BasicBlock? = insertBlock // 获取当前BB
+
     fun myGetInsertFunction(): Function? = insertBlock?.parent // 获取当前函数
 
     fun createAdd(lhs: Value, rhs: Value, name: String = ""): BinaryOperator {
