@@ -349,6 +349,7 @@ class IntegerConfirmer(
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
         // nothing to do
         scopeTree.currentScope = previousScope // 还原scope状态
+        throw IRException("cannot confirm char type in literal '${node.raw}'")
     }
 
     override fun visitStringLiteralExpr(node: StringLiteralExprNode) {
@@ -437,6 +438,13 @@ class IntegerConfirmer(
 
             TokenType.Shl, TokenType.Shr -> {
                 node.left.resolvedType = node.resolvedType
+                if (node.right.resolvedType == PrimitiveResolvedType("int") ||
+                    node.right.resolvedType == PrimitiveResolvedType("signed int")
+                ) {
+                    node.right.resolvedType = PrimitiveResolvedType("i32")
+                } else if (node.right.resolvedType == PrimitiveResolvedType("unsigned int")) {
+                    node.right.resolvedType = PrimitiveResolvedType("u32")
+                }
             }
 
             else -> throw SemanticException(
