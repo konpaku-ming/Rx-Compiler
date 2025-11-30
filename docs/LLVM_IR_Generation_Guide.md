@@ -274,12 +274,12 @@ getIRType(context, ArrayResolvedType(elementType, lengthExpr))  // -> ArrayType
 
 ### const 全局常量约束
 
-**重要规则**：所有使用 `const` 声明的常量**必须是整数类型（int）**。
+**重要规则**：所有使用 `const` 声明的常量**必须是整数类型（IntegerType）**，即 `i32`、`i8`、`i1` 等类型。
 
 `structDefiner.kt` 在处理 `ConstantItemNode` 时会强制执行此约束：
 
 ```kotlin
-// structDefiner.kt 中的实现（visitConstantItem 方法）
+// structDefiner.kt 中的实现（visitConstantItem 方法，第 133-136 行）
 val type = getIRType(context, constantSymbol.type) as? IntegerType
     ?: throw IRException("only support int constant")
 val value = constantSymbol.value as? Int
@@ -291,7 +291,7 @@ val value = constantSymbol.value as? Int
 #### 合法的常量定义示例
 
 ```rust
-// 正确：整数类型常量
+// 正确：i32 整数类型常量
 const MAX_SIZE: i32 = 100;
 const BUFFER_LEN: i32 = 1024;
 ```
@@ -305,15 +305,19 @@ const BUFFER_LEN: i32 = 1024;
 #### 非法的常量定义示例
 
 ```rust
-// 错误：浮点类型不支持
+// 错误：浮点类型不支持（不是 IntegerType）
 const PI: f32 = 3.14;  // 将抛出 IRException
 
-// 错误：布尔类型不支持
-const FLAG: bool = true;  // 将抛出 IRException
+// 错误：结构体类型不支持
+const ORIGIN: Point = Point { x: 0, y: 0 };  // 将抛出 IRException
 
-// 错误：字符串类型不支持
-const NAME: str = "hello";  // 将抛出 IRException
+// 错误：数组类型不支持
+const DATA: [i32; 3] = [1, 2, 3];  // 将抛出 IRException
 ```
+
+> **注意**：虽然 `bool` 和 `char` 在 IR 中会被映射为 `I1Type` 和 `I8Type`（属于 `IntegerType`），
+> 但 `constantSymbol.value as? Int` 的检查可能会导致某些情况下的限制。
+> 建议在实际使用中主要使用 `i32` 类型的常量以确保兼容性。
 
 ### memcpy 的使用
 
@@ -1087,16 +1091,19 @@ call void @makeArray(ptr %arr, i32 1, i32 2, i32 3)
 在实现函数返回结构体/数组的代码生成时，需要进行以下转换：
 
 ```kotlin
+// 伪代码示例 - 展示转换逻辑的核心思路
+// 注意：实际实现可能需要根据具体的 AST 结构和类型解析器进行调整
 fun lowerFunctionItemWithAggregateReturn(
     node: FunctionItemNode,
     module: Module,
-    context: LLVMContext
+    context: LLVMContext,
+    typeResolver: TypeResolver  // 类型解析器，用于解析 AST 类型到 IR 类型
 ) {
     val builder = IRBuilder(context)
     
     // 1. 获取原始返回类型
     val originalReturnType = if (node.returnType != null) {
-        getIRType(context, firstVisitor.resolveType(node.returnType))
+        getIRType(context, typeResolver.resolveType(node.returnType))
     } else {
         context.myGetVoidType()
     }
@@ -1111,7 +1118,7 @@ fun lowerFunctionItemWithAggregateReturn(
         paramTypes.add(context.myGetPointerType())
     }
     node.params.forEach { param ->
-        paramTypes.add(getIRType(context, firstVisitor.resolveType(param.type)))
+        paramTypes.add(getIRType(context, typeResolver.resolveType(param.type)))
     }
     
     // 4. 确定实际返回类型
@@ -1126,6 +1133,7 @@ fun lowerFunctionItemWithAggregateReturn(
     val func = module.createFunction(node.fnName.value, funcType)
     
     // 6. 设置参数（如果是聚合返回，第一个参数是返回指针）
+    // 注意：Argument 的构造方式可能因具体 LLVM 封装而异
     val arguments = mutableListOf<Argument>()
     if (isAggregateReturn) {
         arguments.add(Argument("ret_ptr", context.myGetPointerType(), func))
