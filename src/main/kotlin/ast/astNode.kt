@@ -1,5 +1,7 @@
 package ast
 
+import llvm.Value
+
 enum class NodeType {
     Crate,
     FunctionItem, StructItem, EnumItem, ConstantItem, TraitItem, ImplItem,
@@ -203,9 +205,10 @@ enum class ExprType {
 // Expr
 sealed class ExprNode : ASTNode() {
     var resolvedType: ResolvedType = UnknownResolvedType // expr的类型
-    var exprType: ExprType = ExprType.Unknown // 左右值
+    var exprType: ExprType = ExprType.Unknown // 值的类型
     abstract fun accept(visitor: ASTVisitor)
     var scopePosition: Scope? = null // 初始为null 第一次pass时记录处在哪个Scope中
+    var irValue: Value? = null // 对应的LLVM IR值（一般为值，结构体和数组为指针）
 }
 
 sealed class ExprWithoutBlockNode : ExprNode()

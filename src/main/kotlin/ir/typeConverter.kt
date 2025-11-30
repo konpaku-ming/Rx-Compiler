@@ -58,14 +58,7 @@ fun getIRType(context: LLVMContext, type: ResolvedType): IRType {
         is NamedResolvedType -> {
             val structSymbol = type.symbol as? StructSymbol
                 ?: throw IRException("Named type is not a struct: $type")
-            val structType = context.myGetStructType(structSymbol.name)
-            for ((_, resolvedType) in structSymbol.fields) {
-                if (resolvedType is UnknownResolvedType) {
-                    throw IRException("Struct field type is not resolved: $type")
-                }
-                structType.elements.add(getIRType(context, resolvedType))
-            }
-            structType
+            context.myGetStructType(structSymbol.name) // 此时应该已经定义好了
         }
 
         is UnknownResolvedType -> {
