@@ -770,12 +770,10 @@ class ASTLower(
             ?: throw IRException("Left side of assignment has no address")
 
         // 获取赋值类型
-        val assignType = getIRType(context, node.left.resolvedType)
-
-        when {
-            assignType is StructType -> {
+        when (val assignType = getIRType(context, node.left.resolvedType)) {
+            is StructType -> {
                 // 结构体：使用 memcpy
-                val srcPtr = node.right.irValue
+                val srcPtr = node.right.irValue // 应为一个 ptr
                     ?: throw IRException("Right side of struct assignment has no IR value")
                 // 从左侧表达式的 resolvedType 获取结构体名称
                 val structName = (node.left.resolvedType as? NamedResolvedType)?.name
@@ -786,11 +784,11 @@ class ASTLower(
                 builder.createMemCpy(dstPtr, srcPtr, size, false)
             }
 
-            assignType is ArrayType -> {
+            is ArrayType -> {
                 // 数组：使用 memcpy
-                val srcPtr = node.right.irValue
+                val srcPtr = node.right.irValue // 应为一个 ptr
                     ?: throw IRException("Right side of array assignment has no IR value")
-                val size = getArrayCopySize(assignType)
+                val size = getArrayCopySize(assignType) // i32的Value
                 builder.createMemCpy(dstPtr, srcPtr, size, false)
             }
 
@@ -802,9 +800,8 @@ class ASTLower(
             }
         }
 
-        // 赋值表达式返回 unit 类型，没有返回值
-        node.irValue = null
-        node.irAddr = null
+        node.irValue = null // 无值
+        node.irAddr = null // 无地址
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
@@ -823,17 +820,14 @@ class ASTLower(
 
         // 获取赋值类型
         val assignType = getIRType(context, node.left.resolvedType)
-
         // 复合赋值仅支持标量类型（整数、布尔等），不支持结构体和数组
         if (assignType.isAggregate()) {
             throw IRException("Compound assignment is not supported for aggregate types")
         }
 
-        // 加载左值当前值
-        val leftValue = builder.createLoad(assignType, leftPtr)
-
-        // 获取右值
-        val rightValue = node.right.irValue
+        val leftValue = node.left.irValue // 左操作数的值
+            ?: throw IRException("Right side of compound assignment has no IR value")
+        val rightValue = node.right.irValue // 右操作数的值
             ?: throw IRException("Right side of compound assignment has no IR value")
 
         // 根据运算符执行二元运算
@@ -875,9 +869,8 @@ class ASTLower(
         // 将结果存回左值地址
         builder.createStore(result, leftPtr)
 
-        // 复合赋值表达式返回 unit 类型，没有返回值
-        node.irValue = null
-        node.irAddr = null
+        node.irValue = null // 无值
+        node.irAddr = null // 无地址
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
