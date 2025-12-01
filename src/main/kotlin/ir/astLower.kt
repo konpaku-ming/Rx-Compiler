@@ -448,7 +448,7 @@ class ASTLower(
         } else {
             // 右值：需要先分配空间，初始化后再借用
             val innerValue = node.expr.irValue
-                ?: throw IRException("Cannot borrow a value without an address or value: ${node.expr}")
+                ?: throw IRException("Cannot borrow rvalue: expression has no value: ${node.expr}")
             val innerType = getIRType(context, node.expr.resolvedType)
 
             // 在栈上分配空间
@@ -459,7 +459,7 @@ class ASTLower(
                 is StructType -> {
                     // 结构体：使用 memcpy
                     val structName = (node.expr.resolvedType as? NamedResolvedType)?.name
-                        ?: throw IRException("BorrowExpr's inner type is not NamedResolvedType")
+                        ?: throw IRException("Cannot borrow struct rvalue: expected NamedResolvedType but got ${node.expr.resolvedType}")
                     val sizeFunc = module.myGetFunction("${structName}.size")
                         ?: throw IRException("missing sizeFunc for struct '$structName'")
                     val size = builder.createCall(sizeFunc, emptyList())
