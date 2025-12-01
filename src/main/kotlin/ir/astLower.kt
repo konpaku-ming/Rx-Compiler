@@ -434,7 +434,20 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
+        // 借用表达式（&expr 或 &mut expr）
+        // 语义：获取内部表达式的地址，生成一个指向该地址的引用
         node.expr.accept(this)
+
+        // 获取内部表达式的地址
+        // 对于左值表达式（变量、字段访问、索引访问等），irAddr 包含其存储地址
+        // 对于字面量和临时值，irAddr 为 null，但语义分析阶段应已拒绝此类借用
+        val innerAddr = node.expr.irAddr
+            ?: throw IRException("Cannot borrow a value without an address: ${node.expr}")
+
+        // 借用表达式的值就是内部表达式的地址（指针）
+        node.irValue = innerAddr
+        // 借用表达式本身没有地址（不能对借用再取地址，除非先存储到变量）
+        node.irAddr = null
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
@@ -443,7 +456,29 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
+        // 解引用表达式（*expr）
+        // 语义：从指针/引用中读取值，或获取指向的内存位置
         node.expr.accept(this)
+
+        // 获取内部表达式的值（应该是一个指针）
+        val ptrValue = node.expr.irValue
+            ?: throw IRException("Operand of dereference expression has no IR value")
+
+        // 获取解引用后的类型
+        val innerType = node.resolvedType // 语义分析阶段已解析
+        val derefType = getIRType(context, innerType)
+
+        if (derefType.isAggregate()) {
+            // 结构体/数组：直接返回指针，不进行 load
+            // 因为聚合类型始终以指针形式传递
+            node.irValue = ptrValue
+            node.irAddr = ptrValue // 解引用后的地址就是指针的值
+        } else {
+            // 标量类型：从指针中 load 出实际值
+            val loadedValue = builder.createLoad(derefType, ptrValue)
+            node.irValue = loadedValue
+            node.irAddr = ptrValue // 解引用后的地址就是指针的值
+        }
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
@@ -879,7 +914,11 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
+        // 分组表达式（括号表达式）直接传递内部表达式的值和地址
+        // 括号只影响解析优先级，不影响求值语义
         node.inner.accept(this)
+        node.irValue = node.inner.irValue
+        node.irAddr = node.inner.irAddr
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
