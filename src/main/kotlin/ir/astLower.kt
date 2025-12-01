@@ -113,6 +113,50 @@ class ASTLower(
         }
     }
 
+    /**
+     * 获取左值表达式的地址（用于赋值操作）
+     * 不同于 visitExpr 会对变量进行 load，此方法直接返回变量的地址
+     * 
+     * 支持的左值类型：
+     * - PathExprNode: 变量引用，返回 alloca/参数地址
+     * - FieldExprNode: 字段访问，返回字段的 GEP 地址
+     * - IndexExprNode: 数组索引，返回元素的 GEP 地址
+     * - DerefExprNode: 解引用，返回解引用后的地址
+     */
+    private fun getLValueAddress(node: ast.ExprNode): Value {
+        return when (node) {
+            is PathExprNode -> {
+                // 变量引用：直接返回变量的地址
+                val symbol = node.symbol
+                if (symbol is VariableSymbol) {
+                    symbol.irValue
+                        ?: throw IRException("Variable '${symbol.name}' has no IR value")
+                } else {
+                    throw IRException("Cannot get address of non-variable path expression")
+                }
+            }
+            is ast.FieldExprNode -> {
+                // 字段访问：获取基础结构体的地址，然后 GEP 到字段
+                // TODO: 完整实现需要获取字段索引并生成 GEP
+                node.struct.accept(this)
+                node.irValue ?: throw IRException("FieldExpr has no IR value")
+            }
+            is ast.IndexExprNode -> {
+                // 数组索引：获取数组基址，然后 GEP 到元素
+                // TODO: 完整实现需要生成 GEP
+                node.base.accept(this)
+                node.index.accept(this)
+                node.irValue ?: throw IRException("IndexExpr has no IR value")
+            }
+            is ast.DerefExprNode -> {
+                // 解引用：表达式的值就是地址
+                node.expr.accept(this)
+                node.expr.irValue ?: throw IRException("DerefExpr inner has no IR value")
+            }
+            else -> throw IRException("Expression is not a valid lvalue: ${node.type}")
+        }
+    }
+
     override fun visitCrate(node: CrateNode) {
         scopeTree.currentScope = node.scopePosition!!
 
@@ -383,7 +427,54 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
-
+        // 根据已绑定的符号类型生成相应的 IR
+        // PathExprNode.symbol 在语义分析阶段已绑定
+        when (val symbol = node.symbol) {
+            is VariableSymbol -> {
+                // 变量引用：从符号获取变量地址（alloca/argument），生成 load 指令
+                val varAddress = symbol.irValue
+                    ?: throw IRException("Variable '${symbol.name}' has no IR value (not initialized)")
+                val varType = getIRType(context, symbol.type)
+                
+                // 根据类型决定处理方式：
+                // - 标量类型：生成 load 指令获取值
+                // - 聚合类型（struct/array）：直接使用地址，不 load（因为聚合类型按地址传递）
+                when (varType) {
+                    is llvm.StructType, is llvm.ArrayType -> {
+                        // 聚合类型：irValue 是地址，直接使用
+                        node.irValue = varAddress
+                    }
+                    else -> {
+                        // 标量类型：生成 load 指令
+                        val loadInst = builder.createLoad(varType, varAddress)
+                        node.irValue = loadInst
+                    }
+                }
+            }
+            is ConstantSymbol -> {
+                // 常量引用：常量在 structDefiner 阶段已生成为全局变量
+                // 从模块获取全局常量并 load
+                val constType = getIRType(context, symbol.type)
+                val globalVar = module.myGetGlobalVariable(symbol.name)
+                    ?: throw IRException("Constant '${symbol.name}' not found in module")
+                val loadInst = builder.createLoad(constType, globalVar)
+                node.irValue = loadInst
+            }
+            is FunctionSymbol -> {
+                // 函数引用：用于函数调用，此处不需要生成 load
+                // 函数的 IR 处理在 visitCallExpr 中完成
+                // 这里可以将函数对象存储，但当前架构中 CallExpr 直接通过名称查找函数
+                node.irValue = null
+            }
+            null -> {
+                // 符号未绑定，可能是在 semantic pass 之前调用或其他错误
+                throw IRException("PathExpr symbol is not bound: ${node.first.segment.value}")
+            }
+            else -> {
+                // 其他类型符号（如 StructSymbol 用于类型路径），不需要生成值
+                node.irValue = null
+            }
+        }
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
@@ -670,8 +761,52 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
-        node.left.accept(this)
-        node.right.accept(this)
+        // 赋值表达式处理流程：
+        // 1. 获取左值的地址（不 load，直接取地址）
+        // 2. 计算右值
+        // 3. 根据类型选择存储策略（标量用 store，聚合用 memcpy）
+
+        // 获取左值地址
+        val dstPtr = getLValueAddress(node.left)
+
+        // 获取赋值类型
+        val assignType = getIRType(context, node.left.resolvedType)
+
+        when (assignType) {
+            is StructType -> {
+                // 结构体：使用 memcpy
+                node.right.accept(this)
+                val srcAddr = node.right.irValue
+                    ?: throw IRException("IR Value not initialized in ${node.right}")
+                // 从左值的 resolvedType 获取结构体名称
+                val structName = (node.left.resolvedType as? NamedResolvedType)?.name
+                    ?: throw IRException("AssignExpr left side is not NamedResolvedType")
+                val sizeFunc = module.myGetFunction("${structName}.size")
+                    ?: throw IRException("missing sizeFunc for struct '$structName'")
+                val size = builder.createCall(sizeFunc, emptyList())
+                builder.createMemCpy(dstPtr, srcAddr, size, false)
+            }
+
+            is ArrayType -> {
+                // 数组：使用 memcpy
+                node.right.accept(this)
+                val srcAddr = node.right.irValue
+                    ?: throw IRException("IR Value not initialized in ${node.right}")
+                val size = getArrayCopySize(assignType)
+                builder.createMemCpy(dstPtr, srcAddr, size, false)
+            }
+
+            else -> {
+                // 标量类型：使用 store
+                node.right.accept(this)
+                val value = node.right.irValue
+                    ?: throw IRException("IR Value not initialized in ${node.right}")
+                builder.createStore(value, dstPtr)
+            }
+        }
+
+        // 赋值表达式返回 unit 类型，不需要返回有意义的值
+        node.irValue = null
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
@@ -680,8 +815,57 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
-        node.left.accept(this)
+        // 复合赋值处理流程（如 x += 1）：
+        // 1. 获取左值地址
+        // 2. 从左值地址 load 当前值
+        // 3. 计算右值
+        // 4. 执行运算
+        // 5. store 结果到左值地址
+
+        // 获取左值地址
+        val ptr = getLValueAddress(node.left)
+        val varType = getIRType(context, node.left.resolvedType)
+
+        // Load 当前值
+        val currentValue = builder.createLoad(varType, ptr)
+
+        // 计算右值
         node.right.accept(this)
+        val rightValue = node.right.irValue
+            ?: throw IRException("Right operand of compound assign has no IR value")
+
+        // 执行运算
+        val result = when (node.operator.type) {
+            TokenType.AddAssign -> builder.createAdd(currentValue, rightValue)
+            TokenType.SubAssign -> builder.createSub(currentValue, rightValue)
+            TokenType.MulAssign -> builder.createMul(currentValue, rightValue)
+            TokenType.DivAssign -> if (isUnsignedType(node.left.resolvedType)) {
+                builder.createUDiv(currentValue, rightValue)
+            } else {
+                builder.createSDiv(currentValue, rightValue)
+            }
+            TokenType.ModAssign -> if (isUnsignedType(node.left.resolvedType)) {
+                builder.createURem(currentValue, rightValue)
+            } else {
+                builder.createSRem(currentValue, rightValue)
+            }
+            TokenType.AndAssign -> builder.createAnd(currentValue, rightValue)
+            TokenType.OrAssign -> builder.createOr(currentValue, rightValue)
+            TokenType.XorAssign -> builder.createXor(currentValue, rightValue)
+            TokenType.ShlAssign -> builder.createShl(currentValue, rightValue)
+            TokenType.ShrAssign -> if (isUnsignedType(node.left.resolvedType)) {
+                builder.createLShr(currentValue, rightValue)
+            } else {
+                builder.createAShr(currentValue, rightValue)
+            }
+            else -> throw IRException("Unknown compound assign operator: ${node.operator.type}")
+        }
+
+        // Store 结果
+        builder.createStore(result, ptr)
+
+        // 复合赋值表达式返回 unit 类型
+        node.irValue = null
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
