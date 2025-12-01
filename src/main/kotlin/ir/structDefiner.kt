@@ -97,7 +97,7 @@ class StructDefiner(
             val gepInst = builder.createGEP(
                 structType,
                 context.myGetNullPtrConstant(),
-                listOf(context.myGetIntConstant(context.myGetI32Type(), 1))
+                listOf(context.myGetIntConstant(context.myGetI32Type(), 1U))
             ) // GEP
             val sizeInst = builder.createPtrToInt(
                 context.myGetI32Type(),
@@ -134,7 +134,7 @@ class StructDefiner(
                 ?: throw IRException("only support int constant")
             val value = constantSymbol.value as? Int
                 ?: throw IRException("only support int constant")
-            val intConstant = context.myGetIntConstant(type, value)
+            val intConstant = context.myGetIntConstant(type, value.toUInt())
             module.createGlobalVariable(name, type, true, intConstant)
         }
 
