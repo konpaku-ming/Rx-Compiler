@@ -343,38 +343,6 @@ class BinaryOperator(
     }
 }
 
-class UnaryOperator(
-    val name: String, // 指令对应 Value 的名称
-    val op: String,
-    val type: IRType, // 结果类型
-    val operand: Value // 操作数
-) : Instruction() {
-
-    init {
-        // 检查操作数类型是否为整数
-        if (operand.myGetType() !is IntegerType) {
-            throw IRException("UnaryOperator operand must be of integer type")
-        }
-        // 检查操作数类型是否与结果类型匹配
-        if (operand.myGetType() != type) {
-            throw RuntimeException("UnaryOperator operand type must match result type")
-        }
-        addOperand(operand)
-    }
-
-    override fun myGetType(): IRType {
-        return type
-    }
-
-    override fun myGetName(): String {
-        return "%$name"
-    }
-
-    override fun toString(): String {
-        return "%$name = $op $type ${operand.myGetName()}"
-    }
-}
-
 class LoadInst(
     val name: String, // 指令对应 Value 的名称
     val type: IRType, // 结果类型

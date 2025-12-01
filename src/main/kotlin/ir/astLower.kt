@@ -458,8 +458,10 @@ class ASTLower(
             ?: throw IRException("Operand of negation expression has no IR value")
 
         // 获取操作数的类型
-        val operandType = operandValue.myGetType() as? IntegerType
-            ?: throw IRException("Negation operand must be of integer type")
+        val operandType = operandValue.myGetType()
+        if (operandType !is IntegerType) throw IRException(
+            "Negation operand must be of integer type"
+        )
 
         // 根据运算符类型生成对应的 IR
         val result = when (node.operator.type) {
@@ -469,6 +471,7 @@ class ASTLower(
                 val zero = context.myGetIntConstant(operandType, 0U)
                 builder.createSub(zero, operandValue)
             }
+
             TokenType.Not -> {
                 // 逻辑非 / 位取反: !x
                 // 对于布尔值 (i1)，使用 xor with 1 实现取反
@@ -478,6 +481,7 @@ class ASTLower(
                         val one = context.myGetIntConstant(operandType, 1U)
                         builder.createXor(operandValue, one)
                     }
+
                     else -> {
                         // 对于整数类型，使用 -1 (全1位模式) 进行 XOR 实现位取反
                         // 0xFFFFFFFF as UInt 表示 32 位全 1
@@ -486,6 +490,7 @@ class ASTLower(
                     }
                 }
             }
+
             else -> throw IRException("Unknown negation operator: ${node.operator.type}")
         }
 

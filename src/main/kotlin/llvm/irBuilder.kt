@@ -22,16 +22,6 @@ class IRBuilder(val context: LLVMContext) {
         return binOp
     }
 
-    private fun createUnaryOp(operand: Value, name: String, opName: String): UnaryOperator {
-        if (insertBlock == null) {
-            throw IRException("No insert block")
-        }
-        val actualName = name.ifEmpty { genLLVMReg() }
-        val unaryOp = UnaryOperator(actualName, opName, operand.myGetType(), operand)
-        insertBlock!!.addInstruction(unaryOp)
-        return unaryOp
-    }
-
     private fun createICmp(lhs: Value, rhs: Value, name: String, pred: String): ICmpInst {
         if (insertBlock == null) {
             throw IRException("No insert block")
@@ -100,14 +90,6 @@ class IRBuilder(val context: LLVMContext) {
 
     fun createXor(lhs: Value, rhs: Value, name: String = ""): BinaryOperator {
         return createBinaryOp(lhs, rhs, name, "xor")
-    }
-
-    fun createNeg(operand: Value, name: String = ""): UnaryOperator {
-        return createUnaryOp(operand, name, "neg")
-    }
-
-    fun createNot(operand: Value, name: String = ""): UnaryOperator {
-        return createUnaryOp(operand, name, "not")
     }
 
     fun createAlloca(type: IRType, name: String = ""): AllocaInst {
