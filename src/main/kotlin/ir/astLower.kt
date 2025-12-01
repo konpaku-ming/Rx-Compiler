@@ -1062,6 +1062,7 @@ class ASTLower(
         // 获取数组类型和元素类型
         val baseResolvedType = node.base.resolvedType as? ArrayResolvedType
             ?: throw IRException("Base of index expression is not an array type")
+        // TODO：暂不支持自动解引用
         val arrayType = getIRType(context, baseResolvedType) as ArrayType
         val elementType = arrayType.elementType
 
@@ -1108,7 +1109,7 @@ class ASTLower(
             val fieldName = exprField.name.value
             val fieldIndex = fieldIndexMap[fieldName]
                 ?: throw IRException("Unknown field '$fieldName' in struct '${structSymbol.name}'")
-            val fieldType = structType.myGetElementType(fieldIndex)
+            val fieldType = structType.myGetElementType(i = fieldIndex)
 
             // 计算字段地址：使用 GEP 获取 struct.field 的地址
             val zero = context.myGetIntConstant(context.myGetI32Type(), 0U)
@@ -1146,8 +1147,7 @@ class ASTLower(
             }
         }
 
-        // 结构体表达式的值是结构体的地址（指针）
-        node.irValue = structAlloca
+        node.irValue = structAlloca // 结构体表达式的值是结构体的地址
         node.irAddr = null // 结构体字面量没有地址（不是左值）
 
         scopeTree.currentScope = previousScope // 还原scope状态
@@ -1230,27 +1230,28 @@ class ASTLower(
             is NamedResolvedType -> structType
             is ReferenceResolvedType -> structType.inner as? NamedResolvedType
                 ?: throw IRException("Reference inner type is not a NamedResolvedType")
+
             else -> throw IRException("FieldExprNode's struct is not a struct type: $structType")
         }
         val structSymbol = structResolvedType.symbol as? StructSymbol
             ?: throw IRException("FieldExprNode's symbol is not StructSymbol")
-        val structIRType = context.myGetStructType(structSymbol.name)
+        val structType = getIRType(context, structResolvedType) as StructType
 
         // 获取字段索引
         val fieldName = node.field.value
         val fieldIndexMap = structSymbol.fields.keys.withIndex().associate { (index, name) -> name to index }
         val fieldIndex = fieldIndexMap[fieldName]
             ?: throw IRException("Unknown field '$fieldName' in struct '${structSymbol.name}'")
-        val fieldType = structIRType.myGetElementType(fieldIndex)
+        val fieldType = structType.myGetElementType(fieldIndex)
 
         // 计算字段地址：使用 GEP 获取 struct.field 的地址
         val zero = context.myGetIntConstant(context.myGetI32Type(), 0U)
         val indexConst = context.myGetIntConstant(context.myGetI32Type(), fieldIndex.toUInt())
-        val fieldPtr = builder.createGEP(structIRType, structPtr, listOf(zero, indexConst))
+        val fieldPtr = builder.createGEP(structType, structPtr, listOf(zero, indexConst))
 
         // 根据字段类型设置 irValue 和 irAddr
         if (fieldType.isAggregate()) {
-            // 结构体/数组：返回地址（指针）
+            // 结构体/数组：返回地址
             node.irValue = fieldPtr
             node.irAddr = fieldPtr // 字段表达式的地址是字段的地址
         } else {
