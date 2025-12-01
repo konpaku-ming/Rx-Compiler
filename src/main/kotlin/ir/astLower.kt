@@ -434,6 +434,7 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
+        // TODO: need more check
         // 借用表达式（&expr 或 &mut expr）
         // 语义：获取内部表达式的地址，生成一个指向该地址的引用
         node.expr.accept(this)
@@ -455,6 +456,8 @@ class ASTLower(
     override fun visitDerefExpr(node: DerefExprNode) {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
+
+        // TODO: need more check
 
         // 解引用表达式（*expr）
         // 语义：从指针/引用中读取值，或获取指向的内存位置
