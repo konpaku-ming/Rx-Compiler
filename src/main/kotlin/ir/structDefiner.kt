@@ -97,7 +97,7 @@ class StructDefiner(
             val gepInst = builder.createGEP(
                 structType,
                 context.myGetNullPtrConstant(),
-                listOf(context.myGetIntConstant(context.myGetI32Type(), 1))
+                listOf(context.myGetIntConstant(context.myGetI32Type(), 1U))
             ) // GEP
             val sizeInst = builder.createPtrToInt(
                 context.myGetI32Type(),
@@ -122,7 +122,6 @@ class StructDefiner(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
-
         // 遇到常量直接注册，只支持Int
         val constantName = node.constantName.value
         val constantSymbol = scopeTree.lookup(constantName)
@@ -134,7 +133,7 @@ class StructDefiner(
                 ?: throw IRException("only support int constant")
             val value = constantSymbol.value as? Int
                 ?: throw IRException("only support int constant")
-            val intConstant = context.myGetIntConstant(type, value)
+            val intConstant = context.myGetIntConstant(type, value.toUInt()) // 只保存32位，具体符号由它参与的指令来决定
             module.createGlobalVariable(name, type, true, intConstant)
         }
 

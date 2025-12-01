@@ -328,6 +328,7 @@ class ASTLower(
         val value = stringToUInt(rawValue)
         val intConstant = context.myGetIntConstant(context.myGetI32Type(), value)
         node.irValue = intConstant // 保存IR Value
+        node.irAddr = null // 整数字面量没有地址
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
@@ -353,7 +354,8 @@ class ASTLower(
         // Convert boolean literal to IR constant (i1)
         val value = if (node.raw == "true") 1U else 0U
         val boolConstant = context.myGetIntConstant(context.myGetI1Type(), value)
-        node.irValue = boolConstant
+        node.irValue = boolConstant // 保存IR Value
+        node.irAddr = null // 布尔字面量没有地址
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
@@ -383,7 +385,47 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
+        // PathExprNode 在语义分析阶段已经绑定了 symbol
+        // 这里根据 symbol 类型生成对应的 IR
+        when (val symbol = node.symbol) {
+            is VariableSymbol -> {
+                val symbolAddr = symbol.irValue
+                    ?: throw IRException("Variable '${symbol.name}' has no IR value (alloca not created)")
 
+                val varType = getIRType(context, symbol.type)
+                if (varType.isAggregate()) {
+                    // 结构体/数组：返回地址（指针）
+                    node.irValue = symbolAddr
+                    node.irAddr = symbolAddr // 变量的IR地址
+                } else {
+                    // 标量类型（整数/布尔等）：load 出实际值
+                    val loadedValue = builder.createLoad(varType, symbolAddr)
+                    node.irValue = loadedValue
+                    node.irAddr = symbolAddr // 变量的IR地址
+                }
+            }
+
+            is ConstantSymbol -> {
+                // 常量在 IR 定义阶段已被注册为全局变量
+                val constName = symbol.name
+                val globalVar = module.myGetGlobalVariable(constName)
+                    ?: throw IRException("Constant '$constName' is not defined as global variable")
+
+                val constType = getIRType(context, symbol.type)
+                // 全局常量需要 load 出值，必定为整型
+                val loadedValue = builder.createLoad(constType, globalVar)
+                node.irValue = loadedValue
+                node.irAddr = null // 常量没有地址
+            }
+
+            null -> throw IRException("missing symbol in PathExprNode '$node'")
+
+            else -> {
+                // function / struct 不会作为值处理
+                node.irValue = null
+                node.irAddr = null
+            }
+        }
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
@@ -464,6 +506,7 @@ class ASTLower(
         }
 
         node.irValue = result
+        node.irAddr = null // 二元表达式没有地址
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
@@ -516,6 +559,7 @@ class ASTLower(
         }
 
         node.irValue = result
+        node.irAddr = null
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
@@ -606,7 +650,8 @@ class ASTLower(
                 else -> throw IRException("Unknown lazy boolean operator: ${node.operator.type}")
             }
 
-            node.irValue = phi
+            node.irValue = phi // 设置结果为 PHI 节点
+            node.irAddr = null // 短路布尔表达式没有地址
         }
 
         scopeTree.currentScope = previousScope // 还原scope状态
@@ -631,6 +676,7 @@ class ASTLower(
         // 相同类型，直接返回原值
         if (srcType == dstType) {
             node.irValue = srcValue
+            node.irAddr = null
             scopeTree.currentScope = previousScope
             return
         }
@@ -650,17 +696,19 @@ class ASTLower(
                 val dstIRType = getIRType(context, dstType)
                 val result = builder.createZExt(dstIRType, srcValue)
                 node.irValue = result
+                node.irAddr = null
             }
 
             // i32/u32/isize/usize 之间互转：位宽相同，不需要变换
             srcIsInteger && dstIsInteger -> {
                 // 位宽都是 32 位，直接使用原值
                 node.irValue = srcValue
+                node.irAddr = null
             }
 
-            else -> {
-                throw IRException("Unsupported type cast from ${srcType.name} to ${dstType.name}")
-            }
+            else -> throw IRException(
+                "Unsupported type cast from ${srcType.name} to ${dstType.name}"
+            )
         }
 
         scopeTree.currentScope = previousScope // 还原scope状态

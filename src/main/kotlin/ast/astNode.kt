@@ -209,6 +209,7 @@ sealed class ExprNode : ASTNode() {
     abstract fun accept(visitor: ASTVisitor)
     var scopePosition: Scope? = null // 初始为null 第一次pass时记录处在哪个Scope中
     var irValue: Value? = null // 对应的LLVM IR值（一般为值，结构体和数组为指针）
+    var irAddr: Value? = null // 对应的LLVM IR地址（若expr有地址的话）
 }
 
 sealed class ExprWithoutBlockNode : ExprNode()

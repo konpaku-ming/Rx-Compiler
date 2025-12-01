@@ -3608,9 +3608,21 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
                 symbol.type
             }
 
-            is VariantSymbol -> symbol.type
-            is FunctionSymbol -> UnknownResolvedType
-            is StructSymbol -> UnknownResolvedType
+            is VariantSymbol -> {
+                node.symbol = symbol
+                symbol.type
+            }
+
+            is FunctionSymbol -> {
+                node.symbol = symbol
+                UnknownResolvedType
+            }
+
+            is StructSymbol -> {
+                node.symbol = symbol
+                UnknownResolvedType
+            }
+
             else -> throw SemanticException("cannot resolve path expression")
         }
 
