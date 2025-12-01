@@ -383,7 +383,71 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
+        // PathExprNode 在语义分析阶段已经绑定了 symbol
+        // 这里根据 symbol 类型生成对应的 IR
+        val symbol = node.symbol
+        when (symbol) {
+            is VariableSymbol -> {
+                // 变量引用：从 alloca 的地址 load 出值
+                val varAddr = symbol.irValue
+                    ?: throw IRException("Variable '${symbol.name}' has no IR value (alloca not created)")
 
+                val varType = getIRType(context, symbol.type)
+                when (varType) {
+                    is StructType, is ArrayType -> {
+                        // 结构体和数组：返回地址（指针），不做 load
+                        // 在 ABI 层面，struct/array 以指针传递
+                        node.irValue = varAddr
+                    }
+
+                    else -> {
+                        // 标量类型：load 出实际值
+                        val loadedValue = builder.createLoad(varType, varAddr)
+                        node.irValue = loadedValue
+                    }
+                }
+            }
+
+            is ConstantSymbol -> {
+                // 常量引用：从全局常量中获取值
+                // 在 StructDefiner 阶段，常量已经被注册为全局变量
+                val constName = symbol.name
+                val globalVar = module.myGetGlobalVariable(constName)
+                    ?: throw IRException("Constant '$constName' is not defined as global variable")
+
+                val constType = getIRType(context, symbol.type)
+                // 全局常量需要 load 出值
+                val loadedValue = builder.createLoad(constType, globalVar)
+                node.irValue = loadedValue
+            }
+
+            is FunctionSymbol -> {
+                // 函数引用：在表达式位置时不产生值，
+                // 实际的函数调用在 visitCallExpr 中处理
+                // 这里可以将函数指针设置为 irValue（如果需要函数指针支持）
+                // 目前暂不支持函数作为值，irValue 保持 null
+                node.irValue = null
+            }
+
+            is StructSymbol -> {
+                // 结构体类型引用：通常用于结构体构造表达式 Struct { ... }
+                // 不产生值，由 visitStructExpr 处理
+                node.irValue = null
+            }
+
+            null -> {
+                // 符号未绑定，可能是语义分析阶段未处理的情况
+                // 或者是 FunctionSymbol/StructSymbol 等不绑定到 node.symbol 的情况
+                // 在 FifthVisitor 中，只有 VariableSymbol 和 ConstantSymbol 会绑定 symbol
+                node.irValue = null
+            }
+
+            else -> {
+                // 其他类型的符号（如 EnumSymbol, VariantSymbol 等）
+                // 暂不支持，irValue 保持 null
+                node.irValue = null
+            }
+        }
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
