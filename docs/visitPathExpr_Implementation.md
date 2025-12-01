@@ -1,6 +1,6 @@
 # visitPathExpr 实现文档
 
-本文档说明了 AST 降级（AST Lowering）阶段中 `visitPathExpr` 的实现细节，以及如何处理赋值表达式（如 `x = 1`）。
+本文档说明了 AST 降低（AST Lowering）阶段中 `visitPathExpr` 的实现细节，以及如何处理赋值表达式（如 `x = 1`）。
 
 ## 目录
 

@@ -119,8 +119,8 @@ class ASTLower(
      * 
      * 支持的左值类型：
      * - PathExprNode: 变量引用，返回 alloca/参数地址
-     * - FieldExprNode: 字段访问，返回字段的 GEP 地址
-     * - IndexExprNode: 数组索引，返回元素的 GEP 地址
+     * - FieldExprNode: 字段访问，返回字段的 GEP 地址（TODO: 需完整实现）
+     * - IndexExprNode: 数组索引，返回元素的 GEP 地址（TODO: 需完整实现）
      * - DerefExprNode: 解引用，返回解引用后的地址
      */
     private fun getLValueAddress(node: ast.ExprNode): Value {
@@ -137,21 +137,26 @@ class ASTLower(
             }
             is ast.FieldExprNode -> {
                 // 字段访问：获取基础结构体的地址，然后 GEP 到字段
-                // TODO: 完整实现需要获取字段索引并生成 GEP
-                node.struct.accept(this)
-                node.irValue ?: throw IRException("FieldExpr has no IR value")
+                // TODO: 完整实现需要：
+                // 1. 获取结构体的基址（可能需要递归调用 getLValueAddress）
+                // 2. 查找字段索引
+                // 3. 生成 GEP 指令
+                throw IRException("FieldExpr as lvalue is not yet fully implemented")
             }
             is ast.IndexExprNode -> {
                 // 数组索引：获取数组基址，然后 GEP 到元素
-                // TODO: 完整实现需要生成 GEP
-                node.base.accept(this)
-                node.index.accept(this)
-                node.irValue ?: throw IRException("IndexExpr has no IR value")
+                // TODO: 完整实现需要：
+                // 1. 获取数组的基址
+                // 2. 计算索引表达式的值
+                // 3. 生成 GEP 指令
+                throw IRException("IndexExpr as lvalue is not yet fully implemented")
             }
             is ast.DerefExprNode -> {
-                // 解引用：表达式的值就是地址
+                // 解引用：对于 *ptr，ptr 的值就是目标地址
+                // 需要先求值 ptr 表达式，其结果就是要写入的地址
                 node.expr.accept(this)
-                node.expr.irValue ?: throw IRException("DerefExpr inner has no IR value")
+                node.expr.irValue 
+                    ?: throw IRException("DerefExpr inner expression has no IR value")
             }
             else -> throw IRException("Expression is not a valid lvalue: ${node.type}")
         }
