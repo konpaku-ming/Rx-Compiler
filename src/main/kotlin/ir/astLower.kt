@@ -452,7 +452,45 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
+        // 递归处理子表达式
         node.expr.accept(this)
+        val operandValue = node.expr.irValue
+            ?: throw IRException("Operand of negation expression has no IR value")
+
+        // 获取操作数的类型
+        val operandType = operandValue.myGetType() as? IntegerType
+            ?: throw IRException("Negation operand must be of integer type")
+
+        // 根据运算符类型生成对应的 IR
+        val result = when (node.operator.type) {
+            TokenType.SubNegate -> {
+                // 算术取负: -x 等价于 0 - x
+                // 使用操作数的类型创建零常量，按模运算语义处理
+                val zero = context.myGetIntConstant(operandType, 0U)
+                builder.createSub(zero, operandValue)
+            }
+            TokenType.Not -> {
+                // 逻辑非 / 位取反: !x
+                // 对于布尔值 (i1)，使用 xor with 1 实现取反
+                // 对于整数类型，使用 xor with -1 (0xFFFFFFFF) 实现位取反
+                when (operandType) {
+                    is I1Type -> {
+                        val one = context.myGetIntConstant(operandType, 1U)
+                        builder.createXor(operandValue, one)
+                    }
+                    else -> {
+                        // 对于整数类型，使用 -1 (全1位模式) 进行 XOR 实现位取反
+                        // 0xFFFFFFFF as UInt 表示 32 位全 1
+                        val allOnes = context.myGetIntConstant(operandType, 0xFFFFFFFFU)
+                        builder.createXor(operandValue, allOnes)
+                    }
+                }
+            }
+            else -> throw IRException("Unknown negation operator: ${node.operator.type}")
+        }
+
+        node.irValue = result
+        node.irAddr = null // 一元运算表达式没有地址（不是左值）
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
