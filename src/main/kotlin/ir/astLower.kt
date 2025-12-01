@@ -435,16 +435,51 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
-        // TODO: need more check
         // 借用表达式（&expr 或 &mut expr）
         // 语义：获取内部表达式的地址，生成一个指向该地址的引用
         node.expr.accept(this)
 
         // 获取内部表达式的地址
         // 对于左值表达式（变量、字段访问、索引访问等），irAddr 包含其存储地址
-        // 对于字面量和临时值，irAddr 为 null，但语义分析阶段应已拒绝此类借用
-        val innerAddr = node.expr.irAddr
-            ?: throw IRException("Cannot borrow a value without an address: ${node.expr}")
+        // 对于右值表达式（字面量、临时值等），irAddr 为 null，需要先分配空间再借用
+        val innerAddr = if (node.expr.irAddr != null) {
+            // 左值：直接使用其地址
+            node.expr.irAddr!!
+        } else {
+            // 右值：需要先分配空间，初始化后再借用
+            val innerValue = node.expr.irValue
+                ?: throw IRException("Cannot borrow a value without an address or value: ${node.expr}")
+            val innerType = getIRType(context, node.expr.resolvedType)
+
+            // 在栈上分配空间
+            val tempAlloca = builder.createAlloca(innerType)
+
+            // 根据类型选择初始化策略
+            when (innerType) {
+                is StructType -> {
+                    // 结构体：使用 memcpy
+                    val structName = (node.expr.resolvedType as? NamedResolvedType)?.name
+                        ?: throw IRException("BorrowExpr's inner type is not NamedResolvedType")
+                    val sizeFunc = module.myGetFunction("${structName}.size")
+                        ?: throw IRException("missing sizeFunc for struct '$structName'")
+                    val size = builder.createCall(sizeFunc, emptyList())
+                    builder.createMemCpy(tempAlloca, innerValue, size, false)
+                }
+
+                is ArrayType -> {
+                    // 数组：使用 memcpy
+                    val size = getArrayCopySize(innerType)
+                    builder.createMemCpy(tempAlloca, innerValue, size, false)
+                }
+
+                else -> {
+                    // 标量类型：使用 store
+                    builder.createStore(innerValue, tempAlloca)
+                }
+            }
+
+            tempAlloca
+        }
 
         // 借用表达式的值就是内部表达式的地址（指针）
         node.irValue = innerAddr
@@ -457,8 +492,6 @@ class ASTLower(
     override fun visitDerefExpr(node: DerefExprNode) {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
-
-        // TODO: need more check
 
         // 解引用表达式（*expr）
         // 语义：从指针/引用中读取值，或获取指向的内存位置
