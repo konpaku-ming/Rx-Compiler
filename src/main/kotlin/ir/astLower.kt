@@ -761,8 +761,50 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
+        // 先求值左侧表达式获取地址，再求值右侧表达式获取值
         node.left.accept(this)
         node.right.accept(this)
+
+        // 获取左值地址
+        val dstPtr = node.left.irAddr
+            ?: throw IRException("Left side of assignment has no address")
+
+        // 获取赋值类型
+        val assignType = getIRType(context, node.left.resolvedType)
+
+        when {
+            assignType is StructType -> {
+                // 结构体：使用 memcpy
+                val srcPtr = node.right.irValue
+                    ?: throw IRException("Right side of struct assignment has no IR value")
+                // 从左侧表达式的 resolvedType 获取结构体名称
+                val structName = (node.left.resolvedType as? NamedResolvedType)?.name
+                    ?: throw IRException("Left side of assignment is not a struct type")
+                val sizeFunc = module.myGetFunction("${structName}.size")
+                    ?: throw IRException("missing sizeFunc for struct '$structName'")
+                val size = builder.createCall(sizeFunc, emptyList())
+                builder.createMemCpy(dstPtr, srcPtr, size, false)
+            }
+
+            assignType is ArrayType -> {
+                // 数组：使用 memcpy
+                val srcPtr = node.right.irValue
+                    ?: throw IRException("Right side of array assignment has no IR value")
+                val size = getArrayCopySize(assignType)
+                builder.createMemCpy(dstPtr, srcPtr, size, false)
+            }
+
+            else -> {
+                // 标量类型：使用 store
+                val value = node.right.irValue
+                    ?: throw IRException("Right side of assignment has no IR value")
+                builder.createStore(value, dstPtr)
+            }
+        }
+
+        // 赋值表达式返回 unit 类型，没有返回值
+        node.irValue = null
+        node.irAddr = null
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
@@ -771,8 +813,71 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
+        // 先求值左侧表达式获取地址，再求值右侧表达式获取值
         node.left.accept(this)
         node.right.accept(this)
+
+        // 获取左值地址
+        val leftPtr = node.left.irAddr
+            ?: throw IRException("Left side of compound assignment has no address")
+
+        // 获取赋值类型
+        val assignType = getIRType(context, node.left.resolvedType)
+
+        // 复合赋值仅支持标量类型（整数、布尔等），不支持结构体和数组
+        if (assignType.isAggregate()) {
+            throw IRException("Compound assignment is not supported for aggregate types")
+        }
+
+        // 加载左值当前值
+        val leftValue = builder.createLoad(assignType, leftPtr)
+
+        // 获取右值
+        val rightValue = node.right.irValue
+            ?: throw IRException("Right side of compound assignment has no IR value")
+
+        // 根据运算符执行二元运算
+        val result = when (node.operator.type) {
+            TokenType.AddAssign -> builder.createAdd(leftValue, rightValue)
+            TokenType.SubAssign -> builder.createSub(leftValue, rightValue)
+            TokenType.MulAssign -> builder.createMul(leftValue, rightValue)
+
+            // 除法：根据符号选择指令
+            TokenType.DivAssign -> if (isUnsignedType(node.left.resolvedType)) {
+                builder.createUDiv(leftValue, rightValue)
+            } else {
+                builder.createSDiv(leftValue, rightValue)
+            }
+
+            // 取余：根据符号选择指令
+            TokenType.ModAssign -> if (isUnsignedType(node.left.resolvedType)) {
+                builder.createURem(leftValue, rightValue)
+            } else {
+                builder.createSRem(leftValue, rightValue)
+            }
+
+            // 右移：根据符号选择指令
+            TokenType.ShrAssign -> if (isUnsignedType(node.left.resolvedType)) {
+                builder.createLShr(leftValue, rightValue)  // 逻辑右移
+            } else {
+                builder.createAShr(leftValue, rightValue)  // 算术右移
+            }
+
+            // 位运算：符号无关
+            TokenType.AndAssign -> builder.createAnd(leftValue, rightValue)
+            TokenType.OrAssign -> builder.createOr(leftValue, rightValue)
+            TokenType.XorAssign -> builder.createXor(leftValue, rightValue)
+            TokenType.ShlAssign -> builder.createShl(leftValue, rightValue)
+
+            else -> throw IRException("Unknown compound assignment operator: ${node.operator.type}")
+        }
+
+        // 将结果存回左值地址
+        builder.createStore(result, leftPtr)
+
+        // 复合赋值表达式返回 unit 类型，没有返回值
+        node.irValue = null
+        node.irAddr = null
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
