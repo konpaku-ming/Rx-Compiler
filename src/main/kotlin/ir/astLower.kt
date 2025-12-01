@@ -1001,7 +1001,7 @@ class ASTLower(
 
         // 对重复元素求值
         node.element.accept(this)
-        // lengthExpr 在语义分析阶段已经求值，不需要在 IR 生成阶段处理
+        // lengthExpr 在语义分析阶段已经求值并编码在 ArrayType.numElements 中，不需要在 IR 生成阶段处理
 
         // 将重复元素存储到数组的每个位置
         for (index in 0 until length) {
