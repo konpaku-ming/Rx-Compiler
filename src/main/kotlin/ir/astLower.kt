@@ -388,20 +388,20 @@ class ASTLower(
         val symbol = node.symbol
         when (symbol) {
             is VariableSymbol -> {
-                // 变量引用：从 alloca 的地址 load 出值
+                // 变量引用：根据类型决定是返回值还是地址
                 val varAddr = symbol.irValue
                     ?: throw IRException("Variable '${symbol.name}' has no IR value (alloca not created)")
 
                 val varType = getIRType(context, symbol.type)
                 when (varType) {
                     is StructType, is ArrayType -> {
-                        // 结构体和数组：返回地址（指针），不做 load
-                        // 在 ABI 层面，struct/array 以指针传递
+                        // 聚合类型（结构体/数组）：返回地址（指针），不做 load
+                        // 这是本编译器的设计选择：聚合类型通过指针传递和操作
                         node.irValue = varAddr
                     }
 
                     else -> {
-                        // 标量类型：load 出实际值
+                        // 标量类型（整数/布尔等）：load 出实际值
                         val loadedValue = builder.createLoad(varType, varAddr)
                         node.irValue = loadedValue
                     }
@@ -410,7 +410,7 @@ class ASTLower(
 
             is ConstantSymbol -> {
                 // 常量引用：从全局常量中获取值
-                // 在 StructDefiner 阶段，常量已经被注册为全局变量
+                // 常量在 IR 定义阶段已被注册为全局变量
                 val constName = symbol.name
                 val globalVar = module.myGetGlobalVariable(constName)
                     ?: throw IRException("Constant '$constName' is not defined as global variable")
@@ -424,7 +424,6 @@ class ASTLower(
             is FunctionSymbol -> {
                 // 函数引用：在表达式位置时不产生值，
                 // 实际的函数调用在 visitCallExpr 中处理
-                // 这里可以将函数指针设置为 irValue（如果需要函数指针支持）
                 // 目前暂不支持函数作为值，irValue 保持 null
                 node.irValue = null
             }
@@ -436,9 +435,8 @@ class ASTLower(
             }
 
             null -> {
-                // 符号未绑定，可能是语义分析阶段未处理的情况
-                // 或者是 FunctionSymbol/StructSymbol 等不绑定到 node.symbol 的情况
-                // 在 FifthVisitor 中，只有 VariableSymbol 和 ConstantSymbol 会绑定 symbol
+                // 符号未绑定：对于函数和结构体类型的路径，语义分析阶段
+                // 不会将符号绑定到 node.symbol（只绑定变量和常量）
                 node.irValue = null
             }
 
