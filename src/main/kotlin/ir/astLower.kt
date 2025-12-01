@@ -930,9 +930,57 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
-        for (element in node.elements) {
+        // 获取数组类型
+        val arrayResolvedType = node.resolvedType as? ArrayResolvedType
+            ?: throw IRException("ArrayListExprNode's resolvedType is not ArrayResolvedType")
+        val arrayType = getIRType(context, arrayResolvedType) as ArrayType
+        val elementType = arrayType.elementType
+
+        // 在栈上分配数组空间
+        val arrayAlloca = builder.createAlloca(arrayType)
+
+        // 对每个元素求值并存储到数组中
+        node.elements.forEachIndexed { index, element ->
             element.accept(this)
+
+            // 计算元素地址：使用 GEP 获取 array[index] 的地址
+            val zero = context.myGetIntConstant(context.myGetI32Type(), 0U)
+            val indexConst = context.myGetIntConstant(context.myGetI32Type(), index.toUInt())
+            val elementPtr = builder.createGEP(arrayType, arrayAlloca, listOf(zero, indexConst))
+
+            when (elementType) {
+                is StructType -> {
+                    // 结构体元素：使用 memcpy
+                    val srcPtr = element.irValue
+                        ?: throw IRException("Array element at index $index has no IR value")
+                    val structName = (arrayResolvedType.elementType as? NamedResolvedType)?.name
+                        ?: throw IRException("Array element is not a NamedResolvedType")
+                    val sizeFunc = module.myGetFunction("${structName}.size")
+                        ?: throw IRException("missing sizeFunc for struct '$structName'")
+                    val size = builder.createCall(sizeFunc, emptyList())
+                    builder.createMemCpy(elementPtr, srcPtr, size, false)
+                }
+
+                is ArrayType -> {
+                    // 嵌套数组元素：使用 memcpy
+                    val srcPtr = element.irValue
+                        ?: throw IRException("Array element at index $index has no IR value")
+                    val size = getArrayCopySize(elementType)
+                    builder.createMemCpy(elementPtr, srcPtr, size, false)
+                }
+
+                else -> {
+                    // 标量元素：使用 store
+                    val value = element.irValue
+                        ?: throw IRException("Array element at index $index has no IR value")
+                    builder.createStore(value, elementPtr)
+                }
+            }
         }
+
+        // 数组表达式的值是数组的地址（指针）
+        node.irValue = arrayAlloca
+        node.irAddr = null // 数组字面量没有地址（不是左值）
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
@@ -941,18 +989,99 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
+        // 获取数组类型
+        val arrayResolvedType = node.resolvedType as? ArrayResolvedType
+            ?: throw IRException("ArrayLengthExprNode's resolvedType is not ArrayResolvedType")
+        val arrayType = getIRType(context, arrayResolvedType) as ArrayType
+        val elementType = arrayType.elementType
+        val length = arrayType.numElements
+
+        // 在栈上分配数组空间
+        val arrayAlloca = builder.createAlloca(arrayType)
+
+        // 对重复元素求值
         node.element.accept(this)
-        node.lengthExpr.accept(this)
+        // lengthExpr 在语义分析阶段已经求值并编码在 ArrayType.numElements 中，不需要在 IR 生成阶段处理
+
+        // 将重复元素存储到数组的每个位置
+        for (index in 0 until length) {
+            // 计算元素地址：使用 GEP 获取 array[index] 的地址
+            val zero = context.myGetIntConstant(context.myGetI32Type(), 0U)
+            val indexConst = context.myGetIntConstant(context.myGetI32Type(), index.toUInt())
+            val elementPtr = builder.createGEP(arrayType, arrayAlloca, listOf(zero, indexConst))
+
+            when (elementType) {
+                is StructType -> {
+                    // 结构体元素：使用 memcpy
+                    val srcPtr = node.element.irValue
+                        ?: throw IRException("Repeat element has no IR value")
+                    val structName = (arrayResolvedType.elementType as? NamedResolvedType)?.name
+                        ?: throw IRException("Array element is not a NamedResolvedType")
+                    val sizeFunc = module.myGetFunction("${structName}.size")
+                        ?: throw IRException("missing sizeFunc for struct '$structName'")
+                    val size = builder.createCall(sizeFunc, emptyList())
+                    builder.createMemCpy(elementPtr, srcPtr, size, false)
+                }
+
+                is ArrayType -> {
+                    // 嵌套数组元素：使用 memcpy
+                    val srcPtr = node.element.irValue
+                        ?: throw IRException("Repeat element has no IR value")
+                    val size = getArrayCopySize(elementType)
+                    builder.createMemCpy(elementPtr, srcPtr, size, false)
+                }
+
+                else -> {
+                    // 标量元素：使用 store
+                    val value = node.element.irValue
+                        ?: throw IRException("Repeat element has no IR value")
+                    builder.createStore(value, elementPtr)
+                }
+            }
+        }
+
+        // 数组表达式的值是数组的地址（指针）
+        node.irValue = arrayAlloca
+        node.irAddr = null // 数组字面量没有地址（不是左值）
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
     override fun visitIndexExpr(node: IndexExprNode) {
         val previousScope = scopeTree.currentScope
-        scopeTree.currentScope = node.scopePosition!! // 找到所在的scope\
+        scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
+        // 求值基址表达式和索引表达式
         node.base.accept(this)
         node.index.accept(this)
+
+        // 获取基址（数组的地址）
+        val basePtr = node.base.irValue
+            ?: throw IRException("Base of index expression has no IR value")
+        val indexValue = node.index.irValue
+            ?: throw IRException("Index of index expression has no IR value")
+
+        // 获取数组类型和元素类型
+        val baseResolvedType = node.base.resolvedType as? ArrayResolvedType
+            ?: throw IRException("Base of index expression is not an array type")
+        val arrayType = getIRType(context, baseResolvedType) as ArrayType
+        val elementType = arrayType.elementType
+
+        // 计算元素地址：使用 GEP 获取 array[index] 的地址
+        val zero = context.myGetIntConstant(context.myGetI32Type(), 0U)
+        val elementPtr = builder.createGEP(arrayType, basePtr, listOf(zero, indexValue))
+
+        // 根据元素类型设置 irValue 和 irAddr
+        if (elementType.isAggregate()) {
+            // 结构体/数组：返回地址（指针）
+            node.irValue = elementPtr
+            node.irAddr = elementPtr // 索引表达式的地址是元素的地址
+        } else {
+            // 标量类型：load 出实际值
+            val loadedValue = builder.createLoad(elementType, elementPtr)
+            node.irValue = loadedValue
+            node.irAddr = elementPtr // 索引表达式的地址是元素的地址（用于赋值）
+        }
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
