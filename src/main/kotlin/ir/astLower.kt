@@ -1099,7 +1099,6 @@ class ASTLower(
             is ArrayResolvedType -> baseType
             is ReferenceResolvedType -> baseType.inner as? ArrayResolvedType
                 ?: throw IRException("Reference inner type is not an ArrayResolvedType")
-
             else -> throw IRException("Base of index expression is not an array type: $baseType")
         }
         val arrayType = getIRType(context, arrayResolvedType) as ArrayType
