@@ -1093,10 +1093,15 @@ class ASTLower(
             ?: throw IRException("Index of index expression has no IR value")
 
         // 获取数组类型和元素类型
-        val baseResolvedType = node.base.resolvedType as? ArrayResolvedType
-            ?: throw IRException("Base of index expression is not an array type")
-        // TODO：暂不支持自动解引用
-        val arrayType = getIRType(context, baseResolvedType) as ArrayType
+        // 自动解引用：如果 base 的类型是引用类型，且其内部是数组类型，则提取内部数组类型
+        // 参照 visitFieldExpr 的实现模式
+        val arrayResolvedType = when (val baseType = node.base.resolvedType) {
+            is ArrayResolvedType -> baseType
+            is ReferenceResolvedType -> baseType.inner as? ArrayResolvedType
+                ?: throw IRException("Reference inner type is not an ArrayResolvedType")
+            else -> throw IRException("Base of index expression is not an array type: $baseType")
+        }
+        val arrayType = getIRType(context, arrayResolvedType) as ArrayType
         val elementType = arrayType.elementType
 
         // 计算元素地址：使用 GEP 获取 array[index] 的地址
