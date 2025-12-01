@@ -284,7 +284,7 @@ class IRBuilder(val context: LLVMContext) {
             add(size)
             val volatileConst = context.myGetIntConstant(
                 context.myGetI1Type(),
-                if (isVolatile) 1 else 0,
+                if (isVolatile) 1U else 0U,
             )
             add(volatileConst)
         }

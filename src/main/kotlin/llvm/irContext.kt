@@ -60,7 +60,7 @@ class LLVMContext {
     }
 
     // 获取或创建整数常量对象
-    fun myGetIntConstant(type: IntegerType, value: Int): ConstantInt {
+    fun myGetIntConstant(type: IntegerType, value: UInt): ConstantInt {
         val key = type to value.toLong()
         return intConstants.getOrPut(key) { ConstantInt(type, value) }
     }

@@ -797,7 +797,7 @@ abstract class Constant : Value()
 
 class ConstantInt(
     val type: IntegerType, // 整数类型
-    val value: Int // 值
+    val value: UInt // 值
 ) : Constant() {
     override fun myGetType(): IRType {
         return type
@@ -807,7 +807,7 @@ class ConstantInt(
         return value.toString()
     }
 
-    fun myGetValue(): Int {
+    fun myGetValue(): UInt {
         return value
     }
 

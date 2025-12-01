@@ -90,7 +90,7 @@ class ASTLower(
         val elementSize = getElementSize(arrayType.elementType)
         val arrayLength = arrayType.numElements
         val totalSize = elementSize * arrayLength
-        return context.myGetIntConstant(context.myGetI32Type(), totalSize)
+        return context.myGetIntConstant(context.myGetI32Type(), totalSize.toUInt())
     }
 
     // 元素大小计算（字节）
@@ -317,9 +317,7 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
-        // Convert integer literal to IR constant
-        // Remove type suffix (e.g., i32, u32, isize, usize) and parse the value
-        // Following the same pattern as semantic.kt to properly handle suffixes
+        // 去掉类型后缀，得到纯数字部分
         val rawValue = when {
             node.raw.endsWith("isize") -> node.raw.removeSuffix("isize")
             node.raw.endsWith("usize") -> node.raw.removeSuffix("usize")
@@ -327,10 +325,9 @@ class ASTLower(
             node.raw.endsWith("u32") -> node.raw.removeSuffix("u32")
             else -> node.raw
         }
-        // Semantic analysis already validates bounds, so we can safely parse here
-        val value = stringToUInt(rawValue).toInt()
+        val value = stringToUInt(rawValue)
         val intConstant = context.myGetIntConstant(context.myGetI32Type(), value)
-        node.irValue = intConstant
+        node.irValue = intConstant // 保存IR Value
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
@@ -338,19 +335,14 @@ class ASTLower(
     override fun visitCharLiteralExpr(node: CharLiteralExprNode) {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
-
-        // Convert char literal to IR constant (i8)
-        val charValue = stringToChar(node.raw)
-        val charConstant = context.myGetIntConstant(context.myGetI8Type(), charValue.code)
-        node.irValue = charConstant
-
+        // not support char yet
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
     override fun visitStringLiteralExpr(node: StringLiteralExprNode) {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
-        // nothing to do
+        // not support str yet
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
@@ -359,7 +351,7 @@ class ASTLower(
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
         // Convert boolean literal to IR constant (i1)
-        val value = if (node.raw == "true") 1 else 0
+        val value = if (node.raw == "true") 1U else 0U
         val boolConstant = context.myGetIntConstant(context.myGetI1Type(), value)
         node.irValue = boolConstant
 
@@ -369,28 +361,30 @@ class ASTLower(
     override fun visitCStringLiteralExpr(node: CStringLiteralExprNode) {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
-        // nothing to do
+        // not support str yet
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
     override fun visitRawStringLiteralExpr(node: RawStringLiteralExprNode) {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
-        // nothing to do
+        // not support str yet
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
     override fun visitRawCStringLiteralExpr(node: RawCStringLiteralExprNode) {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
-        // nothing to do
+        // not support str yet
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
     override fun visitPathExpr(node: PathExprNode) {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
-        // nothing to do
+
+
+
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
@@ -597,14 +591,14 @@ class ASTLower(
             when (node.operator.type) {
                 TokenType.And -> {
                     // AND 短路: 左侧为 false 时结果为 false
-                    val falseConst = context.myGetIntConstant(context.myGetI1Type(), 0)
+                    val falseConst = context.myGetIntConstant(context.myGetI1Type(), 0U)
                     phi.addIncoming(falseConst, shortCircuitBB) // 直接从左边跳转过来
                     phi.addIncoming(rightValue, evalRightEndBB) // 求完右边值跳转过来
                 }
 
                 TokenType.Or -> {
                     // OR 短路: 左侧为 true 时结果为 true
-                    val trueConst = context.myGetIntConstant(context.myGetI1Type(), 1)
+                    val trueConst = context.myGetIntConstant(context.myGetI1Type(), 1U)
                     phi.addIncoming(trueConst, shortCircuitBB) // 直接从左边跳转过来
                     phi.addIncoming(rightValue, evalRightEndBB) // 求完右边值跳转过来
                 }
