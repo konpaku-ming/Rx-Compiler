@@ -43,6 +43,7 @@ import ast.PredicateLoopExprNode
 import ast.PrimitiveResolvedType
 import ast.RawCStringLiteralExprNode
 import ast.RawStringLiteralExprNode
+import ast.ReferenceResolvedType
 import ast.ResolvedType
 import ast.ReturnExprNode
 import ast.ScopeTree
@@ -1087,10 +1088,67 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
-        node.path.accept(this)
-        for (field in node.fields) {
-            field.value.accept(this)
+        // 获取结构体符号
+        val structResolvedType = node.resolvedType as? NamedResolvedType
+            ?: throw IRException("StructExprNode's resolvedType is not NamedResolvedType")
+        val structSymbol = structResolvedType.symbol as? StructSymbol
+            ?: throw IRException("StructExprNode's symbol is not StructSymbol")
+        val structType = getIRType(context, structResolvedType) as StructType
+
+        // 在栈上分配结构体空间
+        val structAlloca = builder.createAlloca(structType)
+
+        // 构建 field name -> index 映射（按定义顺序）
+        val fieldIndexMap = structSymbol.fields.keys.withIndex().associate { (index, name) -> name to index }
+
+        // 对每个字段求值并存储到结构体中
+        for (exprField in node.fields) {
+            exprField.value.accept(this)
+
+            val fieldName = exprField.name.value
+            val fieldIndex = fieldIndexMap[fieldName]
+                ?: throw IRException("Unknown field '$fieldName' in struct '${structSymbol.name}'")
+            val fieldType = structType.myGetElementType(fieldIndex)
+
+            // 计算字段地址：使用 GEP 获取 struct.field 的地址
+            val zero = context.myGetIntConstant(context.myGetI32Type(), 0U)
+            val indexConst = context.myGetIntConstant(context.myGetI32Type(), fieldIndex.toUInt())
+            val fieldPtr = builder.createGEP(structType, structAlloca, listOf(zero, indexConst))
+
+            when (fieldType) {
+                is StructType -> {
+                    // 嵌套结构体：使用 memcpy
+                    val srcPtr = exprField.value.irValue
+                        ?: throw IRException("Field '$fieldName' has no IR value")
+                    // 从字段的 resolvedType 获取结构体名称
+                    val innerStructName = (structSymbol.fields[fieldName] as? NamedResolvedType)?.name
+                        ?: throw IRException("Field '$fieldName' is not a NamedResolvedType")
+                    val sizeFunc = module.myGetFunction("${innerStructName}.size")
+                        ?: throw IRException("missing sizeFunc for struct '$innerStructName'")
+                    val size = builder.createCall(sizeFunc, emptyList())
+                    builder.createMemCpy(fieldPtr, srcPtr, size, false)
+                }
+
+                is ArrayType -> {
+                    // 数组字段：使用 memcpy
+                    val srcPtr = exprField.value.irValue
+                        ?: throw IRException("Field '$fieldName' has no IR value")
+                    val size = getArrayCopySize(fieldType)
+                    builder.createMemCpy(fieldPtr, srcPtr, size, false)
+                }
+
+                else -> {
+                    // 标量字段：使用 store
+                    val value = exprField.value.irValue
+                        ?: throw IRException("Field '$fieldName' has no IR value")
+                    builder.createStore(value, fieldPtr)
+                }
+            }
         }
+
+        // 结构体表达式的值是结构体的地址（指针）
+        node.irValue = structAlloca
+        node.irAddr = null // 结构体字面量没有地址（不是左值）
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
@@ -1162,6 +1220,45 @@ class ASTLower(
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
         node.struct.accept(this)
+
+        // 获取结构体表达式的地址
+        val structPtr = node.struct.irValue
+            ?: throw IRException("Struct expression has no IR value")
+
+        // 从 struct 表达式的类型获取结构体符号
+        val structResolvedType = when (val structType = node.struct.resolvedType) {
+            is NamedResolvedType -> structType
+            is ReferenceResolvedType -> structType.inner as? NamedResolvedType
+                ?: throw IRException("Reference inner type is not a NamedResolvedType")
+            else -> throw IRException("FieldExprNode's struct is not a struct type: $structType")
+        }
+        val structSymbol = structResolvedType.symbol as? StructSymbol
+            ?: throw IRException("FieldExprNode's symbol is not StructSymbol")
+        val structIRType = context.myGetStructType(structSymbol.name)
+
+        // 获取字段索引
+        val fieldName = node.field.value
+        val fieldIndexMap = structSymbol.fields.keys.withIndex().associate { (index, name) -> name to index }
+        val fieldIndex = fieldIndexMap[fieldName]
+            ?: throw IRException("Unknown field '$fieldName' in struct '${structSymbol.name}'")
+        val fieldType = structIRType.myGetElementType(fieldIndex)
+
+        // 计算字段地址：使用 GEP 获取 struct.field 的地址
+        val zero = context.myGetIntConstant(context.myGetI32Type(), 0U)
+        val indexConst = context.myGetIntConstant(context.myGetI32Type(), fieldIndex.toUInt())
+        val fieldPtr = builder.createGEP(structIRType, structPtr, listOf(zero, indexConst))
+
+        // 根据字段类型设置 irValue 和 irAddr
+        if (fieldType.isAggregate()) {
+            // 结构体/数组：返回地址（指针）
+            node.irValue = fieldPtr
+            node.irAddr = fieldPtr // 字段表达式的地址是字段的地址
+        } else {
+            // 标量类型：load 出实际值
+            val loadedValue = builder.createLoad(fieldType, fieldPtr)
+            node.irValue = loadedValue
+            node.irAddr = fieldPtr // 字段表达式的地址是字段的地址（用于赋值）
+        }
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
