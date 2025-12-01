@@ -937,7 +937,7 @@ class ASTLower(
         val elementType = arrayType.elementType
 
         // 在栈上分配数组空间
-        val arrayAlloca = builder.createAlloca(arrayType)
+        val arrayAlloca = builder.createAlloca(arrayType) // ptr类型
 
         // 对每个元素求值并存储到数组中
         node.elements.forEachIndexed { index, element ->
@@ -951,7 +951,7 @@ class ASTLower(
             when (elementType) {
                 is StructType -> {
                     // 结构体元素：使用 memcpy
-                    val srcPtr = element.irValue
+                    val srcPtr = element.irValue // 应为一个 ptr
                         ?: throw IRException("Array element at index $index has no IR value")
                     val structName = (arrayResolvedType.elementType as? NamedResolvedType)?.name
                         ?: throw IRException("Array element is not a NamedResolvedType")
@@ -963,7 +963,7 @@ class ASTLower(
 
                 is ArrayType -> {
                     // 嵌套数组元素：使用 memcpy
-                    val srcPtr = element.irValue
+                    val srcPtr = element.irValue // 应为一个 ptr
                         ?: throw IRException("Array element at index $index has no IR value")
                     val size = getArrayCopySize(elementType)
                     builder.createMemCpy(elementPtr, srcPtr, size, false)
@@ -978,8 +978,7 @@ class ASTLower(
             }
         }
 
-        // 数组表达式的值是数组的地址（指针）
-        node.irValue = arrayAlloca
+        node.irValue = arrayAlloca // 数组表达式的值是数组的地址（指针）
         node.irAddr = null // 数组字面量没有地址（不是左值）
 
         scopeTree.currentScope = previousScope // 还原scope状态
@@ -999,9 +998,7 @@ class ASTLower(
         // 在栈上分配数组空间
         val arrayAlloca = builder.createAlloca(arrayType)
 
-        // 对重复元素求值
         node.element.accept(this)
-        // lengthExpr 在语义分析阶段已经求值并编码在 ArrayType.numElements 中，不需要在 IR 生成阶段处理
 
         // 将重复元素存储到数组的每个位置
         for (index in 0 until length) {
@@ -1013,7 +1010,7 @@ class ASTLower(
             when (elementType) {
                 is StructType -> {
                     // 结构体元素：使用 memcpy
-                    val srcPtr = node.element.irValue
+                    val srcPtr = node.element.irValue // 应为一个 ptr
                         ?: throw IRException("Repeat element has no IR value")
                     val structName = (arrayResolvedType.elementType as? NamedResolvedType)?.name
                         ?: throw IRException("Array element is not a NamedResolvedType")
@@ -1025,7 +1022,7 @@ class ASTLower(
 
                 is ArrayType -> {
                     // 嵌套数组元素：使用 memcpy
-                    val srcPtr = node.element.irValue
+                    val srcPtr = node.element.irValue // 应为一个 ptr
                         ?: throw IRException("Repeat element has no IR value")
                     val size = getArrayCopySize(elementType)
                     builder.createMemCpy(elementPtr, srcPtr, size, false)
