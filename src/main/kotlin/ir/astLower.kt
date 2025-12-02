@@ -1811,8 +1811,13 @@ class ASTLower(
         builder.setInsertPoint(thenBB)
         node.thenBranch.accept(this)
         val thenValue = node.thenBranch.irValue
-        builder.createBr(mergeBB)
         val thenEndBB = builder.myGetInsertBlock() ?: thenBB // then分支结束块
+        // 仅在当前块未终结时添加跳转（分支可能以 return/break/continue 结束）
+        // 记录是否添加了跳转到 merge 块的指令
+        val thenJumpsToMerge = !thenEndBB.isTerminated()
+        if (thenJumpsToMerge) {
+            builder.createBr(mergeBB)
+        }
 
         // ===== Else 分支 =====
         builder.setInsertPoint(elseBB)
@@ -1824,8 +1829,13 @@ class ASTLower(
             // 没有else分支时，返回Unit类型，irValue为null
             elseValue = null
         }
-        builder.createBr(mergeBB)
         val elseEndBB = builder.myGetInsertBlock() ?: elseBB // else分支结束块
+        // 仅在当前块未终结时添加跳转（分支可能以 return/break/continue 结束）
+        // 记录是否添加了跳转到 merge 块的指令
+        val elseJumpsToMerge = !elseEndBB.isTerminated()
+        if (elseJumpsToMerge) {
+            builder.createBr(mergeBB)
+        }
 
         // ===== Merge 块 =====
         builder.setInsertPoint(mergeBB)
@@ -1837,26 +1847,34 @@ class ASTLower(
             node.irAddr = null
         } else if (isAggregate) {
             // 聚合类型（struct/array）使用PHI节点返回指针
-            if (thenValue != null && elseValue != null) {
+            // 只有实际跳转到 merge 块的分支才参与 PHI
+            val thenIncoming = if (thenJumpsToMerge && thenValue != null) thenValue to thenEndBB else null
+            val elseIncoming = if (elseJumpsToMerge && elseValue != null) elseValue to elseEndBB else null
+
+            if (thenIncoming != null && elseIncoming != null) {
                 val phi = builder.createPHI(context.myGetPointerType())
-                phi.addIncoming(thenValue, thenEndBB)
-                phi.addIncoming(elseValue, elseEndBB)
+                phi.addIncoming(thenIncoming.first, thenIncoming.second)
+                phi.addIncoming(elseIncoming.first, elseIncoming.second)
                 node.irValue = phi
             } else {
-                // 某个分支没有值（如返回Never类型），使用有值的那个
-                node.irValue = thenValue ?: elseValue
+                // 只有一个分支跳转到 merge 块，或都不跳转
+                node.irValue = thenIncoming?.first ?: elseIncoming?.first
             }
             node.irAddr = null // IfExpr 不能做左值
         } else {
             // 标量类型使用PHI节点
-            if (thenValue != null && elseValue != null) {
+            // 只有实际跳转到 merge 块的分支才参与 PHI
+            val thenIncoming = if (thenJumpsToMerge && thenValue != null) thenValue to thenEndBB else null
+            val elseIncoming = if (elseJumpsToMerge && elseValue != null) elseValue to elseEndBB else null
+
+            if (thenIncoming != null && elseIncoming != null) {
                 val phi = builder.createPHI(resultType)
-                phi.addIncoming(thenValue, thenEndBB)
-                phi.addIncoming(elseValue, elseEndBB)
+                phi.addIncoming(thenIncoming.first, thenIncoming.second)
+                phi.addIncoming(elseIncoming.first, elseIncoming.second)
                 node.irValue = phi
             } else {
-                // 某个分支没有值（如返回Never类型），使用有值的那个
-                node.irValue = thenValue ?: elseValue
+                // 只有一个分支跳转到 merge 块，或都不跳转
+                node.irValue = thenIncoming?.first ?: elseIncoming?.first
             }
             node.irAddr = null // IfExpr 不能做左值
         }
