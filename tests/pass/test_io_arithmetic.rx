@@ -1,0 +1,24 @@
+/*
+Test Package: IR-BuiltinIO
+Test Target: getInt with arithmetic
+Author: Copilot
+Time: 2025-12-02
+Verdict: Success
+Comment: Test getInt with arithmetic operations
+*/
+
+fn main() {
+    let a: i32 = getInt();
+    let b: i32 = getInt();
+    
+    // Test various arithmetic operations with getInt results
+    let sum: i32 = a + b;
+    let diff: i32 = a - b;
+    let prod: i32 = a * b;
+    
+    printInt(sum);
+    printInt(diff);
+    printInt(prod);
+    
+    exit(0);
+}

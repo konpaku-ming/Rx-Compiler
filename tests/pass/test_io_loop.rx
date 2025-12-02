@@ -1,0 +1,24 @@
+/*
+Test Package: IR-BuiltinIO
+Test Target: I/O in loop
+Author: Copilot
+Time: 2025-12-02
+Verdict: Success
+Comment: Test I/O functions inside loop structures
+*/
+
+fn main() {
+    let n: i32 = getInt();
+    let mut sum: i32 = 0;
+    let mut i: i32 = 0;
+    
+    while (i < n) {
+        let val: i32 = getInt();
+        sum += val;
+        printInt(sum);
+        i += 1;
+    }
+    
+    printlnInt(sum);
+    exit(0);
+}

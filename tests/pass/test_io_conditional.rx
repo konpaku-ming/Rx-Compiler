@@ -1,0 +1,22 @@
+/*
+Test Package: IR-BuiltinIO
+Test Target: I/O in conditional
+Author: Copilot
+Time: 2025-12-02
+Verdict: Success
+Comment: Test I/O functions inside conditional statements
+*/
+
+fn main() {
+    let n: i32 = getInt();
+    
+    if (n > 0) {
+        printInt(1);
+        printlnInt(n);
+    } else {
+        printInt(0);
+        printlnInt(0 - n);
+    }
+    
+    exit(0);
+}
