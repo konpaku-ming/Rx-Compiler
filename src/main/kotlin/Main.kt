@@ -66,10 +66,10 @@ fun main(args: Array<String>) {
         // 生成LLVM IR并写入文件
         val irContent = module.print()
         try {
-            File("test.ll").writeText(irContent, Charsets.UTF_8)
-            println("IR 已写入 test.ll")
+            File("main.ll").writeText(irContent, Charsets.UTF_8)
+            println("IR has been written in main.ll")
         } catch (e: Exception) {
-            System.err.println("error: cannot write file 'test.ll': ${e.message}")
+            System.err.println("error: cannot write file 'main.ll': ${e.message}")
             exitProcess(1)
         }
 
