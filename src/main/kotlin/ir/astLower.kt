@@ -1668,6 +1668,36 @@ class ASTLower(
         val func = module.myGetFunction(funcName)
             ?: throw IRException("Function '$funcName' not found in module")
 
+        // 特判：内置I/O函数不使用ret_ptr约定，直接按原函数签名调用
+        // printInt(int n) -> void
+        // printlnInt(int n) -> void
+        // getInt() -> int
+        if (funcName in listOf("printInt", "printlnInt", "getInt")) {
+            // 构建参数列表（不包含ret_ptr）
+            val args = mutableListOf<Value>()
+            for (param in node.params) {
+                param.accept(this)
+                val paramValue = param.irValue
+                    ?: throw IRException("Call parameter has no IR value")
+                args.add(paramValue)
+            }
+
+            // 调用函数
+            val callResult = builder.createCall(func, args)
+
+            // 设置 irValue
+            if (funcName == "getInt") {
+                // getInt 返回 i32
+                node.irValue = callResult
+            } else {
+                // printInt 和 printlnInt 返回 void（Unit）
+                node.irValue = null
+            }
+            node.irAddr = null
+            scopeTree.currentScope = previousScope
+            return
+        }
+
         // 获取调用的返回类型
         val returnType = getIRType(context, node.resolvedType)
 
