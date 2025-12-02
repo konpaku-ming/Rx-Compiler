@@ -1668,10 +1668,10 @@ class ASTLower(
         val func = module.myGetFunction(funcName)
             ?: throw IRException("Function '$funcName' not found in module")
 
-        // 特判：内置I/O函数不使用ret_ptr约定，直接按原函数签名调用
+        // 特判：内建I/O函数不使用ret_ptr约定，直接按原函数签名调用
         // printInt(int n) -> void
         // printlnInt(int n) -> void
-        // getInt() -> int
+        // getInt() -> i32
         if (funcName in listOf("printInt", "printlnInt", "getInt")) {
             // 构建参数列表（不包含ret_ptr）
             val args = mutableListOf<Value>()
@@ -1690,7 +1690,7 @@ class ASTLower(
                 // getInt 返回 i32
                 node.irValue = callResult
             } else {
-                // printInt 和 printlnInt 返回 void（Unit）
+                // printInt 和 printlnInt 返回 void
                 node.irValue = null
             }
             node.irAddr = null
