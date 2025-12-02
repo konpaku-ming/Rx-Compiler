@@ -412,20 +412,20 @@ class ASTLower(
                 for (i in paramOffset until arguments.size) {
                     val arg = arguments[i]
                     val originalIndex = i - paramOffset
-                    
+
                     // 获取原始IR类型和参数符号
                     val originalIRType = originalParamIRTypes[originalIndex]
                     val paramSymbol = funcSymbol.parameters[originalIndex]
-                    
+
                     // 查找对应的 VariableSymbol 并绑定 irValue
                     val paramName = arg.name
                     val varSymbol = bodyScope.lookupLocal(paramName) as? VariableSymbol
-                    
+
                     if (originalIRType.isAggregate()) {
                         // 聚合类型：arg 是指向外部数据的指针
                         // 需要分配本地存储并 memcpy 以获取值语义
                         val alloca = builder.createAlloca(originalIRType)
-                        
+
                         when (originalIRType) {
                             is StructType -> {
                                 // 结构体：使用 sizeFunc 获取大小
@@ -436,14 +436,16 @@ class ASTLower(
                                 val size = builder.createCall(sizeFunc, emptyList())
                                 builder.createMemCpy(alloca, arg, size, false)
                             }
+
                             is ArrayType -> {
                                 // 数组：计算大小
                                 val size = getArrayCopySize(originalIRType)
                                 builder.createMemCpy(alloca, arg, size, false)
                             }
+
                             else -> throw IRException("Unexpected aggregate type: $originalIRType")
                         }
-                        
+
                         varSymbol?.irValue = alloca
                     } else {
                         // 标量类型：直接 alloca 并 store
@@ -1612,35 +1614,28 @@ class ASTLower(
         // 获取被调用的函数符号
         val funcPath = node.func as? PathExprNode
             ?: throw IRException("CallExpr func is not a PathExprNode")
-        
+
         // 从 PathExprNode 获取函数符号（语义分析阶段已绑定）
         val funcSymbol = funcPath.symbol as? FunctionSymbol
             ?: throw IRException("CallExpr func does not refer to a FunctionSymbol")
-        
-        // 获取函数名 - 处理关联函数（如 Struct::method）
-        val funcName = if (funcPath.second != null) {
-            // 关联函数调用: Struct::func
-            val structName = funcPath.first.segment.value
-            val methodName = funcPath.second!!.segment.value
-            "${structName}.${methodName}"
-        } else {
-            funcPath.first.segment.value
-        }
-        
+
+        // 获取函数名
+        val funcName = funcSymbol.name
+
         // 获取 IR 函数
         val func = module.myGetFunction(funcName)
             ?: throw IRException("Function '$funcName' not found in module")
-        
+
         // 获取调用的返回类型
         val returnType = getIRType(context, node.resolvedType)
-        
+
         // 分配返回缓冲区（统一返回约定：所有非 main 函数都使用 ret_ptr）
         val retAlloca = builder.createAlloca(returnType)
-        
+
         // 构建参数列表
         val args = mutableListOf<Value>()
         args.add(retAlloca)  // ret_ptr 作为第一个参数
-        
+
         // 处理参数（方法调用和普通函数调用参数处理相同）
         // 注意：方法调用通过 Type::method(&self, ...) 形式时，self 参数已在 node.params[0] 中
         for (param in node.params) {
@@ -1651,10 +1646,10 @@ class ASTLower(
             // 但在 IR 层面，两者都是直接添加 irValue（聚合类型的 irValue 就是指针）
             args.add(paramValue)
         }
-        
+
         // 调用函数（返回 void）
         builder.createCall(func, args)
-        
+
         // 设置 irValue
         if (node.resolvedType is UnitResolvedType) {
             // Unit 类型不需要读取返回值
@@ -1667,7 +1662,7 @@ class ASTLower(
             node.irValue = builder.createLoad(returnType, retAlloca)
         }
         node.irAddr = null
-        
+
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
@@ -1677,21 +1672,22 @@ class ASTLower(
 
         // 先访问 receiver（语义分析阶段可能已将其包装为 BorrowExprNode）
         node.receiver.accept(this)
-        
+
         // 获取方法名
         val methodName = node.method.segment.value
-        
+
         // 获取 receiver 的类型以找到方法所属的结构体
         val receiverType = node.receiver.resolvedType
         val structSymbol: StructSymbol
         val structName: String
-        
+
         when (receiverType) {
             is NamedResolvedType -> {
                 structSymbol = receiverType.symbol as? StructSymbol
                     ?: throw IRException("Method receiver should be a struct")
                 structName = structSymbol.name
             }
+
             is ReferenceResolvedType -> {
                 val innerType = receiverType.inner as? NamedResolvedType
                     ?: throw IRException("Reference inner type is not a NamedResolvedType for method call")
@@ -1699,39 +1695,40 @@ class ASTLower(
                     ?: throw IRException("Method receiver should be a struct")
                 structName = structSymbol.name
             }
+
             else -> {
                 // 内置方法（如 to_string, len 等）暂不支持 IR 生成
                 throw IRException("Built-in method '$methodName' IR generation not supported yet")
             }
         }
-        
+
         // 获取方法符号
         val methodSymbol = structSymbol.methods[methodName]
             ?: throw IRException("Method '$methodName' not found in struct '$structName'")
-        
-        // 构建 IR 函数名：StructName.methodName
-        val funcName = "${structName}.${methodName}"
-        
+
+        // 构建 IR 函数名：methodName
+        val funcName = methodName
+
         // 获取 IR 函数
         val func = module.myGetFunction(funcName)
             ?: throw IRException("Method function '$funcName' not found in module")
-        
+
         // 获取调用的返回类型
         val returnType = getIRType(context, node.resolvedType)
-        
+
         // 分配返回缓冲区
         val retAlloca = builder.createAlloca(returnType)
-        
+
         // 构建参数列表
         val args = mutableListOf<Value>()
         args.add(retAlloca)  // ret_ptr 作为第一个参数
-        
+
         // 添加 self 参数（receiver）
         // receiver 在语义分析阶段已经被适当处理（如自动借用）
         val selfValue = node.receiver.irValue
             ?: throw IRException("Method receiver has no IR value")
         args.add(selfValue)
-        
+
         // 添加其他参数
         // 聚合类型（struct/array）以指针形式传递，标量类型传值
         // 但在 IR 层面，两者都是直接添加 irValue（聚合类型的 irValue 就是指针）
@@ -1741,10 +1738,10 @@ class ASTLower(
                 ?: throw IRException("Method parameter has no IR value")
             args.add(paramValue)
         }
-        
+
         // 调用方法（返回 void）
         builder.createCall(func, args)
-        
+
         // 设置 irValue
         if (node.resolvedType is UnitResolvedType) {
             node.irValue = null
