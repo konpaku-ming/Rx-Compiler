@@ -1,0 +1,21 @@
+/*
+Test Package: IR-BuiltinIO
+Test Target: getInt
+Author: Copilot
+Time: 2025-12-02
+Verdict: Success
+Comment: Test getInt return value assignment and usage
+*/
+
+fn main() {
+    // Test getInt return value assignment
+    let n: i32 = getInt();
+    
+    // Use the returned value in expression
+    let doubled: i32 = n * 2;
+    
+    // Print the result
+    printInt(doubled);
+    
+    exit(0);
+}

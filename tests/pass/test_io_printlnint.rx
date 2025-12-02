@@ -1,0 +1,24 @@
+/*
+Test Package: IR-BuiltinIO
+Test Target: printlnInt
+Author: Copilot
+Time: 2025-12-02
+Verdict: Success
+Comment: Test printlnInt with constant and variable arguments
+*/
+
+fn main() {
+    // Test printlnInt with constant
+    printlnInt(123);
+    
+    // Test printlnInt with variable
+    let a: i32 = 456;
+    printlnInt(a);
+    
+    // Test printlnInt with expression
+    let b: i32 = 20;
+    let c: i32 = 30;
+    printlnInt(b * c);
+    
+    exit(0);
+}

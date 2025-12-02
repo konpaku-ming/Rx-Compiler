@@ -1,0 +1,23 @@
+/*
+Test Package: IR-BuiltinIO
+Test Target: printInt
+Author: Copilot
+Time: 2025-12-02
+Verdict: Success
+Comment: Test printInt with constant and variable arguments
+*/
+
+fn main() {
+    // Test printInt with constant
+    printInt(42);
+    
+    // Test printInt with variable
+    let x: i32 = 100;
+    printInt(x);
+    
+    // Test printInt with expression
+    let y: i32 = 10;
+    printInt(y + 5);
+    
+    exit(0);
+}
