@@ -54,6 +54,7 @@ import ast.StructSymbol
 import ast.TokenType
 import ast.TraitItemNode
 import ast.TypeCastExprNode
+import ast.UnitResolvedType
 import ast.UnknownResolvedType
 import ast.VariableSymbol
 import ast.stringToChar
@@ -1318,9 +1319,96 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
+        // If表达式的控制流实现：
+        // entry:
+        //   %cond = ... (求值条件表达式)
+        //   br i1 %cond, label %then, label %else
+        // then:
+        //   %then_val = ... (求值then分支)
+        //   br label %merge
+        // else:
+        //   %else_val = ... (求值else分支，如果有的话)
+        //   br label %merge
+        // merge:
+        //   %result = phi [%then_val, %then_end], [%else_val, %else_end]
+
+        // 首先求值条件表达式
         node.condition.accept(this)
+        val condValue = node.condition.irValue
+            ?: throw IRException("Condition of if expression has no IR value")
+
+        // 获取当前函数以创建新的基本块
+        val currentFunc = builder.myGetInsertFunction()
+        if (currentFunc == null) {
+            throw IRException("the if expr '$node' is not in a Function")
+        }
+
+        // 获取if表达式的返回类型
+        val resultType = getIRType(context, node.resolvedType)
+        val isAggregate = resultType.isAggregate()
+        val isUnitType = node.resolvedType == ast.UnitResolvedType
+
+        // 创建基本块
+        val thenBB = currentFunc.createBasicBlock("if_then")
+        val elseBB = currentFunc.createBasicBlock("if_else")
+        val mergeBB = currentFunc.createBasicBlock("if_merge")
+
+        // 条件跳转
+        builder.createCondBr(condValue, thenBB, elseBB)
+
+        // ===== Then 分支 =====
+        builder.setInsertPoint(thenBB)
         node.thenBranch.accept(this)
-        node.elseBranch?.accept(this)
+        val thenValue = node.thenBranch.irValue
+        builder.createBr(mergeBB)
+        val thenEndBB = builder.myGetInsertBlock() ?: thenBB
+
+        // ===== Else 分支 =====
+        builder.setInsertPoint(elseBB)
+        val elseValue: Value?
+        if (node.elseBranch != null) {
+            node.elseBranch.accept(this)
+            elseValue = node.elseBranch.irValue
+        } else {
+            // 没有else分支时，返回Unit类型，irValue为null
+            elseValue = null
+        }
+        builder.createBr(mergeBB)
+        val elseEndBB = builder.myGetInsertBlock() ?: elseBB
+
+        // ===== Merge 块 =====
+        builder.setInsertPoint(mergeBB)
+
+        // 根据返回类型设置 irValue
+        if (isUnitType) {
+            // Unit类型不需要PHI节点
+            node.irValue = null
+            node.irAddr = null
+        } else if (isAggregate) {
+            // 聚合类型（struct/array）使用PHI节点返回指针
+            if (thenValue != null && elseValue != null) {
+                val phi = builder.createPHI(context.myGetPointerType())
+                phi.addIncoming(thenValue, thenEndBB)
+                phi.addIncoming(elseValue, elseEndBB)
+                node.irValue = phi
+            } else {
+                // 某个分支没有值（如返回Never类型），使用有值的那个
+                node.irValue = thenValue ?: elseValue
+            }
+            node.irAddr = null // IfExpr 不能做左值
+        } else {
+            // 标量类型使用PHI节点
+            if (thenValue != null && elseValue != null) {
+                val phi = builder.createPHI(resultType)
+                phi.addIncoming(thenValue, thenEndBB)
+                phi.addIncoming(elseValue, elseEndBB)
+                node.irValue = phi
+            } else {
+                // 某个分支没有值（如返回Never类型），使用有值的那个
+                node.irValue = thenValue ?: elseValue
+            }
+            node.irAddr = null // IfExpr 不能做左值
+        }
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
