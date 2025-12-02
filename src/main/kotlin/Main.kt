@@ -63,10 +63,15 @@ fun main(args: Array<String>) {
         val astLower = ASTLower(semanticScopeTree, context, module, builder)
         astLower.visitCrate(node = ast)
 
-        // 生成LLVM IR
-        println("\n--- generating IR ---")
-        module.print() // 打印 IR 字符串
-        println("-------------------")
+        // 生成LLVM IR并写入文件
+        val irContent = module.print()
+        try {
+            File("test.ll").writeText(irContent, Charsets.UTF_8)
+            println("IR 已写入 test.ll")
+        } catch (e: Exception) {
+            System.err.println("error: cannot write file 'test.ll': ${e.message}")
+            exitProcess(1)
+        }
 
 
         println("success")
