@@ -121,7 +121,7 @@ class IRBuilder(val context: LLVMContext) {
         return store
     }
 
-    fun createRet(value: Value): ReturnInst {
+    fun createRet(value: Value?): ReturnInst {
         if (insertBlock == null) {
             throw IRException("No insert block")
         }
