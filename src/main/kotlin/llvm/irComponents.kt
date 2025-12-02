@@ -451,7 +451,7 @@ class ICmpInst(
     }
 
     override fun toString(): String {
-        return "$name = icmp $predicate ${lhs.myGetType()} ${lhs.myGetName()}, ${rhs.myGetName()}"
+        return "%$name = icmp $predicate ${lhs.myGetType()} ${lhs.myGetName()}, ${rhs.myGetName()}"
     }
 }
 
