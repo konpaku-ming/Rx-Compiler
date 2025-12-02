@@ -261,7 +261,8 @@ class ASTLower(
                 // 设置函数参数
                 val arguments = mutableListOf<Argument>()
                 node.params.forEachIndexed { i, param ->
-                    val pattern = param.paramPattern as IdentifierPatternNode
+                    val pattern = param.paramPattern as? IdentifierPatternNode
+                        ?: throw IRException("Expected IdentifierPatternNode for function parameter")
                     val paramType = paramTypes[i]
                     arguments.add(Argument(pattern.name.value, paramType, func))
                 }
@@ -284,7 +285,8 @@ class ASTLower(
                     // 查找对应的 VariableSymbol 并绑定 irValue
                     val paramName = arg.name
                     val paramSymbol = bodyScope.lookupLocal(paramName) as? VariableSymbol
-                    paramSymbol?.irValue = alloca
+                        ?: throw IRException("Parameter symbol not found: $paramName")
+                    paramSymbol.irValue = alloca
                 }
 
                 // 创建返回块
@@ -330,7 +332,8 @@ class ASTLower(
                 arguments.add(Argument("ret_ptr", context.myGetPointerType(), func))
                 // 原始参数
                 node.params.forEachIndexed { i, param ->
-                    val pattern = param.paramPattern as IdentifierPatternNode
+                    val pattern = param.paramPattern as? IdentifierPatternNode
+                        ?: throw IRException("Expected IdentifierPatternNode for function parameter")
                     val paramType = paramTypes[i + 1]  // +1 因为第一个是 ret_ptr
                     arguments.add(Argument(pattern.name.value, paramType, func))
                 }
@@ -353,7 +356,8 @@ class ASTLower(
                     // 查找对应的 VariableSymbol 并绑定 irValue
                     val paramName = arg.name
                     val paramSymbol = bodyScope.lookupLocal(paramName) as? VariableSymbol
-                    paramSymbol?.irValue = alloca
+                        ?: throw IRException("Parameter symbol not found: $paramName")
+                    paramSymbol.irValue = alloca
                 }
 
                 // 创建返回块
@@ -391,13 +395,15 @@ class ASTLower(
     private fun handleImplicitReturn(body: BlockExprNode, returnValueIRType: IRType) {
         val retPtr = currentReturnBufferPtr ?: return
 
-        if (body.tailExpr != null && body.irValue != null) {
+        // 检查是否有尾表达式并且有对应的 IR 值
+        val tailValue = if (body.tailExpr != null) body.irValue else null
+
+        if (tailValue != null) {
             // 有尾表达式，将其值写入返回缓冲区
-            val tailValue = body.irValue!!
             when (returnValueIRType) {
                 is StructType -> {
                     // 结构体：使用 memcpy
-                    val structName = (body.tailExpr.resolvedType as? NamedResolvedType)?.name
+                    val structName = (body.tailExpr!!.resolvedType as? NamedResolvedType)?.name
                         ?: throw IRException("Expected NamedResolvedType for struct return")
                     val sizeFunc = module.myGetFunction("${structName}.size")
                         ?: throw IRException("missing sizeFunc for struct '$structName'")
@@ -1819,8 +1825,9 @@ class ASTLower(
         if (isMainFunction) {
             // main 函数：直接跳转到返回块，返回值是 i32 0
             // main 函数的返回值在返回块中设置为 0
+            // 注意：即使有显式返回值，main 函数也总是返回 0
+            // 这里仍然需要求值返回表达式以处理可能的副作用
             if (node.value != null) {
-                // 有显式返回值，先求值但不使用（main 函数总是返回 0）
                 node.value.accept(this)
             }
             // 跳转到返回块
