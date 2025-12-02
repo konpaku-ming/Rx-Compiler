@@ -344,8 +344,18 @@ class ASTLower(
                 }
 
                 // 添加原始参数
+                // 注意：对于聚合类型（struct/array），参数以指针形式传递
+                // 保存原始IR类型，用于后续在函数入口处（callee prologue）进行memcpy
+                val originalParamIRTypes = mutableListOf<IRType>()
                 for (param in funcSymbol.parameters) {
-                    paramTypes.add(getIRType(context, param.paramType))
+                    val originalType = getIRType(context, param.paramType)
+                    originalParamIRTypes.add(originalType)
+                    // 如果是聚合类型，参数类型为指针；否则为原始类型
+                    if (originalType.isAggregate()) {
+                        paramTypes.add(context.myGetPointerType())
+                    } else {
+                        paramTypes.add(originalType)
+                    }
                 }
 
                 // 创建函数类型（返回 void）
@@ -396,17 +406,51 @@ class ASTLower(
                     selfSymbol.irValue = selfArg
                 }
 
-                // 为每个原始参数创建 alloca 并 store（跳过 ret_ptr 和 self）
+                // 为每个原始参数创建本地存储（跳过 ret_ptr 和 self）
+                // - 聚合类型参数以指针形式传入，需要 alloca + memcpy 复制到本地存储
+                // - 标量类型参数直接 alloca + store
                 for (i in paramOffset until arguments.size) {
                     val arg = arguments[i]
-                    val paramType = paramTypes[i]
-                    val alloca = builder.createAlloca(paramType)
-                    builder.createStore(arg, alloca)
-
+                    val originalIndex = i - paramOffset
+                    
+                    // 获取原始IR类型和参数符号
+                    val originalIRType = originalParamIRTypes[originalIndex]
+                    val paramSymbol = funcSymbol.parameters[originalIndex]
+                    
                     // 查找对应的 VariableSymbol 并绑定 irValue
                     val paramName = arg.name
-                    val paramSymbol = bodyScope.lookupLocal(paramName) as? VariableSymbol
-                    paramSymbol?.irValue = alloca
+                    val varSymbol = bodyScope.lookupLocal(paramName) as? VariableSymbol
+                    
+                    if (originalIRType.isAggregate()) {
+                        // 聚合类型：arg 是指向外部数据的指针
+                        // 需要分配本地存储并 memcpy 以获取值语义
+                        val alloca = builder.createAlloca(originalIRType)
+                        
+                        when (originalIRType) {
+                            is StructType -> {
+                                // 结构体：使用 sizeFunc 获取大小
+                                val structName = (paramSymbol.paramType as? NamedResolvedType)?.name
+                                    ?: throw IRException("Expected NamedResolvedType for struct parameter, got: ${paramSymbol.paramType}")
+                                val sizeFunc = module.myGetFunction("${structName}.size")
+                                    ?: throw IRException("missing sizeFunc for struct '$structName'")
+                                val size = builder.createCall(sizeFunc, emptyList())
+                                builder.createMemCpy(alloca, arg, size, false)
+                            }
+                            is ArrayType -> {
+                                // 数组：计算大小
+                                val size = getArrayCopySize(originalIRType)
+                                builder.createMemCpy(alloca, arg, size, false)
+                            }
+                            else -> throw IRException("Unexpected aggregate type: $originalIRType")
+                        }
+                        
+                        varSymbol?.irValue = alloca
+                    } else {
+                        // 标量类型：直接 alloca 并 store
+                        val alloca = builder.createAlloca(originalIRType)
+                        builder.createStore(arg, alloca)
+                        varSymbol?.irValue = alloca
+                    }
                 }
 
                 // 创建返回块
