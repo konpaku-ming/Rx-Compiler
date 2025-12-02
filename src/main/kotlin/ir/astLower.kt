@@ -95,9 +95,9 @@ class ASTLower(
      * 循环上下文类，管理循环的控制流信息
      */
     private data class LoopContext(
-        /** 条件检查块（仅 while 循环有），continue 跳转到此块 */
+        /** 条件检查块（仅 while 循环有），while 循环的 continue 跳转到此块 */
         val condBB: BasicBlock?,
-        /** 循环体块（仅 loop 循环有），continue 跳转到此块 */
+        /** 循环体块，loop 循环的 continue 跳转到此块（while 循环不使用此块作为 continue 目标）*/
         val bodyBB: BasicBlock,
         /** 循环后续块，break 跳转到此块 */
         val afterBB: BasicBlock,
@@ -106,7 +106,7 @@ class ASTLower(
         /** break 的值和来源块（用于创建 PHI 节点） */
         val breakIncomings: MutableList<Pair<Value, BasicBlock>> = mutableListOf()
     ) {
-        /** 获取 continue 应该跳转到的块 */
+        /** 获取 continue 应该跳转到的块：while 循环跳转到 condBB，loop 循环跳转到 bodyBB */
         fun getContinueTarget(): BasicBlock = condBB ?: bodyBB
     }
 
@@ -351,6 +351,9 @@ class ASTLower(
         val afterBB = currentFunc.createBasicBlock("loop_after")
 
         // 3. 获取循环的返回类型
+        // 注意：loop 循环的 breakType 在语义分析阶段初始为 UnknownResolvedType，
+        // 如果没有 break 表达式，则保持为 UnknownResolvedType（此时 needsPhi 为 false）
+        // 如果有 break 表达式，则由 break 表达式的值类型决定
         val loopScope = node.block.scopePosition as? LoopScope
         val breakType = loopScope?.breakType ?: UnknownResolvedType
 
@@ -384,6 +387,8 @@ class ASTLower(
         // 8. 设置插入点到 after 块并创建 PHI（如果需要）
         builder.setInsertPoint(afterBB)
 
+        // 注意：如果 needsPhi 为 true，语义分析已确保 breakIncomings 不会为空
+        // 因为 breakType 不是 Unit/Unknown/Never 意味着至少有一个带值的 break 表达式
         if (needsPhi && loopContext.breakIncomings.isNotEmpty()) {
             val phiType = getIRType(context, breakType)
             val phi = builder.createPHI(phiType)
