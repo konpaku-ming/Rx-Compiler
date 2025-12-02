@@ -1619,6 +1619,19 @@ class ASTLower(
         // 获取函数名
         val funcName = funcSymbol.name
 
+        // 特判：当调用的函数名为 exit 且出现在 main 函数中时，让 main 函数返回 0
+        // exit 只会在 main 函数中出现，此时直接跳转到 main 的返回块（返回块已设置返回 0）
+        if (funcName == "exit" && currentFunctionName == "main") {
+            val returnBB = currentReturnBlock
+                ?: throw IRException("exit called in main but no return block available")
+            builder.createBr(returnBB)
+            // exit 表达式的类型是 Never，不会产生值
+            node.irValue = null
+            node.irAddr = null
+            scopeTree.currentScope = previousScope
+            return
+        }
+
         // 获取 IR 函数
         val func = module.myGetFunction(funcName)
             ?: throw IRException("Function '$funcName' not found in module")
