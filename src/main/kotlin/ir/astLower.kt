@@ -29,6 +29,7 @@ import ast.FunctionScope
 import ast.FunctionSymbol
 import ast.LoopScope
 import ast.GroupedExprNode
+import ast.IdentifierPatternNode
 import ast.IfExprNode
 import ast.ImplItemNode
 import ast.IndexExprNode
@@ -48,6 +49,7 @@ import ast.RawStringLiteralExprNode
 import ast.ReferenceResolvedType
 import ast.ResolvedType
 import ast.ReturnExprNode
+import ast.Scope
 import ast.ScopeTree
 import ast.StringLiteralExprNode
 import ast.StructExprNode
@@ -90,6 +92,12 @@ class ASTLower(
     // 如果当前函数返回 struct/array，则此变量保存传入的返回缓冲区指针（第一个参数）
     // 否则为 null
     private var currentReturnBufferPtr: Value? = null
+
+    // 当前函数的返回块
+    private var currentReturnBlock: BasicBlock? = null
+
+    // 当前函数的名称（用于判断是否是 main 函数）
+    private var currentFunctionName: String? = null
 
     /**
      * 循环上下文类，管理循环的控制流信息
@@ -152,6 +160,45 @@ class ASTLower(
         }
     }
 
+    /**
+     * 处理隐式返回（块的尾表达式或 Unit）
+     */
+    private fun handleImplicitReturn(body: BlockExprNode, returnValueIRType: IRType) {
+        val retPtr = currentReturnBufferPtr ?: return
+
+        if (body.tailExpr != null && body.irValue != null) {
+            // 有尾表达式，将其值写入返回缓冲区
+            val tailValue = body.irValue!!
+            when (returnValueIRType) {
+                is StructType -> {
+                    // 结构体：使用 memcpy
+                    val structName = (body.tailExpr.resolvedType as? NamedResolvedType)?.name
+                        ?: throw IRException("Expected NamedResolvedType for struct return")
+                    val sizeFunc = module.myGetFunction("${structName}.size")
+                        ?: throw IRException("missing sizeFunc for struct '$structName'")
+                    val size = builder.createCall(sizeFunc, emptyList())
+                    builder.createMemCpy(retPtr, tailValue, size, false)
+                }
+
+                is ArrayType -> {
+                    // 数组：使用 memcpy
+                    val size = getArrayCopySize(returnValueIRType)
+                    builder.createMemCpy(retPtr, tailValue, size, false)
+                }
+
+                else -> {
+                    // 标量：使用 store
+                    builder.createStore(tailValue, retPtr)
+                }
+            }
+        } else {
+            // 无尾表达式或尾表达式为 Unit
+            // 写入 i8 0 作为 Unit 的返回值
+            val zero = context.myGetIntConstant(context.myGetI8Type(), 0U)
+            builder.createStore(zero, retPtr)
+        }
+    }
+
     override fun visitCrate(node: CrateNode) {
         scopeTree.currentScope = node.scopePosition!!
 
@@ -198,31 +245,160 @@ class ASTLower(
         }
 
         if (node.body != null) {
-            // 获取原始返回类型的 IR 类型
-            val originalReturnType = getIRType(context, funcSymbol.returnType)
+            // 保存当前函数名
+            currentFunctionName = fnName
 
-            // 检查是否需要使用 struct/array 返回 ABI
-            // 如果返回类型是 struct 或 array，需要：
-            // 1. 将返回类型改为 void
-            // 2. 添加第一个参数作为返回缓冲区指针（caller-allocated）
-            // 3. 在函数体内将结果写入该指针
-            // 4. 最后 ret void
-            if (originalReturnType.isAggregate()) {
-                // TODO: 完整实现函数 IR 生成时：
-                // - 生成的函数签名：第一个参数为 ptr 类型（返回缓冲区指针）
-                // - 实际返回类型变为 void
-                // - 在函数入口保存 ret_ptr 参数到 currentReturnBufferPtr
-                // - 在 return 语句处，将值写入 currentReturnBufferPtr 并 ret void
+            // 获取原始返回类型
+            val originalReturnType = funcSymbol.returnType
 
-                // 当前仅标记并遍历函数体
-                // 保存返回缓冲区指针（实际实现时从第一个参数获取）
-                // currentReturnBufferPtr = firstArgument // 需要在函数 IR 生成时设置
+            // 计算实际的返回值 IR 类型，其中 UnitType 会被当作 i8 处理
+            val returnValueIRType = getIRType(context, originalReturnType)
+
+            // 特殊处理 main 函数：
+            // - main 函数不使用 ret_ptr 参数
+            // - main 函数返回 i32 类型
+            val isMainFunction = fnName == "main"
+
+            // 切换到函数体的作用域（参数在这个作用域中定义）
+            val bodyScope = node.body.scopePosition!!
+            scopeTree.currentScope = bodyScope
+
+            if (isMainFunction) {
+                // main 函数：返回 i32，无 ret_ptr 参数
+                val paramTypes = mutableListOf<IRType>()
+
+                // 添加原始参数（但不添加 ret_ptr）
+                for (param in funcSymbol.parameters) {
+                    paramTypes.add(getIRType(context, param.paramType))
+                }
+
+                // 创建函数类型（返回 i32）
+                val funcType = context.myGetFunctionType(context.myGetI32Type(), paramTypes)
+
+                // 创建函数
+                val func = module.myGetOrCreateFunction(fnName, funcType)
+
+                // 设置函数参数
+                val arguments = mutableListOf<Argument>()
+                node.params.forEachIndexed { i, param ->
+                    val pattern = param.paramPattern as IdentifierPatternNode
+                    val paramType = paramTypes[i]
+                    arguments.add(Argument(pattern.name.value, paramType, func))
+                }
+                func.setArguments(arguments)
+
+                // 创建入口块
+                val entryBB = func.createBasicBlock("entry")
+                builder.setInsertPoint(entryBB)
+
+                // main 函数不使用 currentReturnBufferPtr
+                currentReturnBufferPtr = null
+
+                // 为每个参数创建 alloca 并 store
+                for (i in arguments.indices) {
+                    val arg = arguments[i]
+                    val paramType = paramTypes[i]
+                    val alloca = builder.createAlloca(paramType)
+                    builder.createStore(arg, alloca)
+
+                    // 查找对应的 VariableSymbol 并绑定 irValue
+                    val paramName = arg.name
+                    val paramSymbol = bodyScope.lookupLocal(paramName) as? VariableSymbol
+                    paramSymbol?.irValue = alloca
+                }
+
+                // 创建返回块
+                val returnBB = func.createBasicBlock("return")
+                currentReturnBlock = returnBB
+
+                // 生成函数体
+                visitBlockExpr(node.body, createScope = false)
+
+                // 如果函数体没有以终结指令结束，需要处理隐式返回
+                val currentBB = builder.myGetInsertBlock()
+                if (currentBB != null && !currentBB.isTerminated()) {
+                    // main 函数隐式返回 0
+                    builder.createBr(returnBB)
+                }
+
+                // 生成返回块
+                builder.setInsertPoint(returnBB)
+                // main 函数返回 i32 0
+                val zero = context.myGetIntConstant(context.myGetI32Type(), 0U)
+                builder.createRet(zero)
+            } else {
+                // 非 main 函数：使用统一返回约定
+                // 第一个参数：返回缓冲区指针（ptr 类型）
+                val paramTypes = mutableListOf<IRType>()
+                paramTypes.add(context.myGetPointerType())  // ret_ptr
+
+                // 添加原始参数
+                for (param in funcSymbol.parameters) {
+                    paramTypes.add(getIRType(context, param.paramType))
+                }
+
+                // 创建函数类型（返回 void）
+                val funcType = context.myGetFunctionType(context.myGetVoidType(), paramTypes)
+
+                // 创建函数
+                val func = module.myGetOrCreateFunction(fnName, funcType)
+
+                // 设置函数参数
+                val arguments = mutableListOf<Argument>()
+                // 第一个参数：ret_ptr
+                arguments.add(Argument("ret_ptr", context.myGetPointerType(), func))
+                // 原始参数
+                node.params.forEachIndexed { i, param ->
+                    val pattern = param.paramPattern as IdentifierPatternNode
+                    val paramType = paramTypes[i + 1]  // +1 因为第一个是 ret_ptr
+                    arguments.add(Argument(pattern.name.value, paramType, func))
+                }
+                func.setArguments(arguments)
+
+                // 创建入口块
+                val entryBB = func.createBasicBlock("entry")
+                builder.setInsertPoint(entryBB)
+
+                // 保存返回缓冲区指针（第一个参数）
+                currentReturnBufferPtr = arguments[0]
+
+                // 为每个参数创建 alloca 并 store（跳过 ret_ptr）
+                for (i in 1 until arguments.size) {
+                    val arg = arguments[i]
+                    val paramType = paramTypes[i]
+                    val alloca = builder.createAlloca(paramType)
+                    builder.createStore(arg, alloca)
+
+                    // 查找对应的 VariableSymbol 并绑定 irValue
+                    val paramName = arg.name
+                    val paramSymbol = bodyScope.lookupLocal(paramName) as? VariableSymbol
+                    paramSymbol?.irValue = alloca
+                }
+
+                // 创建返回块
+                val returnBB = func.createBasicBlock("return")
+                currentReturnBlock = returnBB
+
+                // 生成函数体
+                visitBlockExpr(node.body, createScope = false)
+
+                // 如果函数体没有以终结指令结束，需要处理隐式返回
+                val currentBB = builder.myGetInsertBlock()
+                if (currentBB != null && !currentBB.isTerminated()) {
+                    // 隐式返回：尾表达式或 Unit
+                    handleImplicitReturn(node.body, returnValueIRType)
+                    builder.createBr(returnBB)
+                }
+
+                // 生成返回块
+                builder.setInsertPoint(returnBB)
+                builder.createRet(null)  // ret void
             }
 
-            visitBlockExpr(node.body, createScope = false)
-
-            // 清理返回缓冲区指针
+            // 清理状态
             currentReturnBufferPtr = null
+            currentReturnBlock = null
+            currentFunctionName = null
         }
 
         scopeTree.currentScope = previousScope // 还原scope状态
@@ -1611,41 +1787,89 @@ class ASTLower(
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
+    /**
+     * 向上查找 FunctionScope
+     */
+    private fun findFunctionScope(scope: Scope): FunctionScope? {
+        var current: Scope? = scope
+        while (current != null) {
+            if (current is FunctionScope) {
+                return current
+            }
+            current = current.parent
+        }
+        return null
+    }
+
     override fun visitReturnExpr(node: ReturnExprNode) {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
-        node.value?.accept(this)
+        // 获取返回块
+        val returnBB = currentReturnBlock
+            ?: throw IRException("ReturnExpr not in a function with return block")
 
-        // 如果当前函数使用 struct/array 返回 ABI（currentReturnBufferPtr 不为空）
-        // 则需要将返回值写入返回缓冲区，而非直接 ret value
-        if (currentReturnBufferPtr != null && node.value != null) {
-            val returnValue = node.value.irValue
-            if (returnValue != null) {
-                val returnType = getIRType(context, node.value.resolvedType)
-                // TODO: 完整实现时：
-                // 1. 如果是 struct，使用 memcpy 将值复制到 currentReturnBufferPtr
-                // 2. 如果是 array，同样使用 memcpy
-                // 3. 然后 ret void
-                // 示例伪代码：
-                // when (returnType) {
-                //     is StructType -> {
-                //         val structName = (node.value.resolvedType as NamedResolvedType).name
-                //         val sizeFunc = module.myGetFunction("$structName.size")!!
-                //         val size = builder.createCall(sizeFunc, emptyList())
-                //         builder.createMemCpy(currentReturnBufferPtr!!, returnValue, size, false)
-                //     }
-                //     is ArrayType -> {
-                //         val size = getArrayCopySize(returnType)
-                //         builder.createMemCpy(currentReturnBufferPtr!!, returnValue, size, false)
-                //     }
-                // }
-                // builder.createRet(null) // ret void
-            }
+        // 判断是否为 main 函数
+        val isMainFunction = currentFunctionName == "main"
+
+        if (isMainFunction) {
+            throw IRException("main function must end with a exit(0)")
         } else {
-            // 标量类型直接返回
-            // TODO: builder.createRet(node.value?.irValue)
+            // 非 main 函数：使用统一返回约定
+            val retPtr = currentReturnBufferPtr
+                ?: throw IRException("ReturnExpr not in a function with return buffer")
+
+            // 获取当前函数的返回类型
+            val funcScope = findFunctionScope(scopeTree.currentScope)
+                ?: throw IRException("ReturnExpr not in a function scope")
+            val originalReturnType = funcScope.returnType
+
+            // 计算返回值的 IR 类型（UnitType会被当作i8处理）
+            val returnValueIRType = getIRType(context, originalReturnType)
+
+            if (node.value != null) {
+                // 有返回值表达式
+                node.value.accept(this)
+                val returnValue = node.value.irValue
+                    ?: throw IRException("Return value expression has no IR value")
+
+                // 将返回值写入返回缓冲区
+                when (returnValueIRType) {
+                    is StructType -> {
+                        // 结构体：使用 memcpy
+                        val structName = (node.value.resolvedType as? NamedResolvedType)?.name
+                            ?: throw IRException("Expected NamedResolvedType for struct return")
+                        val sizeFunc = module.myGetFunction("${structName}.size")
+                            ?: throw IRException("missing sizeFunc for struct '$structName'")
+                        val size = builder.createCall(sizeFunc, emptyList())
+                        builder.createMemCpy(retPtr, returnValue, size, false)
+                    }
+
+                    is ArrayType -> {
+                        // 数组：使用 memcpy
+                        val size = getArrayCopySize(returnValueIRType)
+                        builder.createMemCpy(retPtr, returnValue, size, false)
+                    }
+
+                    else -> {
+                        // 标量类型：使用 store
+                        builder.createStore(returnValue, retPtr)
+                    }
+                }
+            } else {
+                // 无返回值表达式（隐式返回 Unit）
+                // 写入 i8 0 作为 Unit 的返回值
+                val zero = context.myGetIntConstant(context.myGetI8Type(), 0U)
+                builder.createStore(zero, retPtr)
+            }
+
+            // 跳转到返回块
+            builder.createBr(returnBB)
         }
+
+        // return 表达式的类型是 Never，没有值
+        node.irValue = null
+        node.irAddr = null
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
