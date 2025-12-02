@@ -24,7 +24,9 @@ import ast.EnumItemNode
 import ast.ExprStmtNode
 import ast.FieldExprNode
 import ast.FunctionItemNode
+import ast.FunctionSymbol
 import ast.GroupedExprNode
+import ast.IdentifierPatternNode
 import ast.IfExprNode
 import ast.ImplItemNode
 import ast.IndexExprNode
@@ -48,12 +50,15 @@ import ast.TraitItemNode
 import ast.TypeCastExprNode
 import ast.UnknownResolvedType
 import exception.IRException
+import exception.SemanticException
+import llvm.Argument
 import llvm.IRBuilder
+import llvm.IRType
 import llvm.IntegerType
 import llvm.LLVMContext
 import llvm.Module
 
-class StructDefiner(
+class PreDefiner(
     private val scopeTree: ScopeTree,
     private val context: LLVMContext,
     private val module: Module,
@@ -144,7 +149,103 @@ class StructDefiner(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!!
 
-        if (node.body != null) visitBlockExpr(node.body, createScope = false)
+        // 获取函数符号以获取返回类型信息
+        val fnName = node.fnName.value
+        val funcSymbol = scopeTree.lookup(fnName)
+        if (funcSymbol == null || funcSymbol !is FunctionSymbol) {
+            throw SemanticException("missing FunctionSymbol")
+        }
+
+        if (node.body != null) {
+            // 特殊处理 main 函数：
+            // - main 函数不使用 ret_ptr 参数
+            // - main 函数返回 i32 类型
+            val isMainFunction = fnName == "main"
+
+            // 切换到函数体的作用域（参数在这个作用域中定义）
+            val bodyScope = node.body.scopePosition!!
+            scopeTree.currentScope = bodyScope
+
+            if (isMainFunction) {
+                // main 函数：返回 i32，无 ret_ptr 参数
+                val paramTypes = mutableListOf<IRType>()
+
+                // 添加原始参数（但不添加 ret_ptr）
+                for (param in funcSymbol.parameters) {
+                    paramTypes.add(getIRType(context, param.paramType))
+                }
+
+                // 创建函数类型（返回 i32）
+                val funcType = context.myGetFunctionType(context.myGetI32Type(), paramTypes)
+
+                // 创建函数
+                val func = module.myGetOrCreateFunction(fnName, funcType)
+
+                // 设置函数参数
+                val arguments = mutableListOf<Argument>()
+                node.params.forEachIndexed { i, param ->
+                    val pattern = param.paramPattern as IdentifierPatternNode
+                    val paramType = paramTypes[i]
+                    arguments.add(Argument(pattern.name.value, paramType, func))
+                }
+                func.setArguments(arguments)
+
+                visitBlockExpr(node.body, createScope = false)
+            } else {
+                // 非 main 函数：使用统一返回约定
+                // 第一个参数：返回缓冲区指针（ptr 类型）
+                val paramTypes = mutableListOf<IRType>()
+                paramTypes.add(context.myGetPointerType())  // ret_ptr
+
+                // 使用 funcSymbol.isMethod 来判断是否是方法
+                val isMethod = funcSymbol.isMethod
+
+                // 如果是方法，添加 self 参数（作为指针传递）
+                if (isMethod) {
+                    paramTypes.add(context.myGetPointerType())  // self_ptr
+                }
+
+                // 添加原始参数
+                // 注意：对于聚合类型（struct/array），参数以指针形式传递
+                for (param in funcSymbol.parameters) {
+                    val originalType = getIRType(context, param.paramType)
+                    // 如果是聚合类型，参数类型为指针；否则为原始类型
+                    if (originalType.isAggregate()) {
+                        paramTypes.add(context.myGetPointerType())
+                    } else {
+                        paramTypes.add(originalType)
+                    }
+                }
+
+                // 创建函数类型（返回 void）
+                val funcType = context.myGetFunctionType(context.myGetVoidType(), paramTypes)
+
+                // 创建函数
+                val func = module.myGetOrCreateFunction(fnName, funcType)
+
+                // 设置函数参数
+                val arguments = mutableListOf<Argument>()
+                // 第一个参数：ret_ptr
+                arguments.add(Argument("ret_ptr", context.myGetPointerType(), func))
+
+                // 如果是方法，添加 self 参数
+                if (isMethod) {
+                    arguments.add(Argument("self", context.myGetPointerType(), func))
+                }
+
+                // 原始参数
+                // 计算偏移量：ret_ptr 占 1 个位置，如果有 self 则占 2 个位置
+                val paramOffset = if (isMethod) 2 else 1
+                node.params.forEachIndexed { i, param ->
+                    val pattern = param.paramPattern as IdentifierPatternNode
+                    val paramType = paramTypes[i + paramOffset]
+                    arguments.add(Argument(pattern.name.value, paramType, func))
+                }
+                func.setArguments(arguments)
+
+                visitBlockExpr(node.body, createScope = false)
+            }
+        }
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }

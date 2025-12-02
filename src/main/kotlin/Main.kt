@@ -11,7 +11,7 @@ import java.io.File
 import kotlin.system.exitProcess
 import exception.CompilerException
 import ir.ASTLower
-import ir.StructDefiner
+import ir.PreDefiner
 import ir.IntegerConfirmer
 import llvm.LLVMContext
 import llvm.Module
@@ -58,7 +58,7 @@ fun main(args: Array<String>) {
         val context = LLVMContext()
         val module = Module("main", context)
         val builder = IRBuilder(context)
-        val structDefiner = StructDefiner(semanticScopeTree, context, module, builder)
+        val structDefiner = PreDefiner(semanticScopeTree, context, module, builder)
         structDefiner.visitCrate(node = ast)
         val astLower = ASTLower(semanticScopeTree, context, module, builder)
         astLower.visitCrate(node = ast)

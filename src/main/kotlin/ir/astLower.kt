@@ -301,20 +301,12 @@ class ASTLower(
                     paramTypes.add(getIRType(context, param.paramType))
                 }
 
-                // 创建函数类型（返回 i32）
-                val funcType = context.myGetFunctionType(context.myGetI32Type(), paramTypes)
-
-                // 创建函数
-                val func = module.myGetOrCreateFunction(fnName, funcType)
+                // 获取函数
+                val func = module.myGetFunction(fnName)
+                    ?: throw IRException("missing Function '$fnName'")
 
                 // 设置函数参数
-                val arguments = mutableListOf<Argument>()
-                node.params.forEachIndexed { i, param ->
-                    val pattern = param.paramPattern as IdentifierPatternNode
-                    val paramType = paramTypes[i]
-                    arguments.add(Argument(pattern.name.value, paramType, func))
-                }
-                func.setArguments(arguments)
+                val arguments = func.myGetArguments()
 
                 // 创建入口块
                 val entryBB = func.createBasicBlock("entry")
@@ -357,20 +349,12 @@ class ASTLower(
                 builder.createRet(zero)
             } else {
                 // 非 main 函数：使用统一返回约定
-                // 第一个参数：返回缓冲区指针（ptr 类型）
-                val paramTypes = mutableListOf<IRType>()
-                paramTypes.add(context.myGetPointerType())  // ret_ptr
 
                 // 使用 funcSymbol.isMethod 来判断是否是方法
                 val isMethod = funcSymbol.isMethod
 
                 // self 参数的索引常量（如果是方法，self 在 ret_ptr 之后，索引为 1）
                 val selfArgIndex = 1
-
-                // 如果是方法，添加 self 参数（作为指针传递）
-                if (isMethod) {
-                    paramTypes.add(context.myGetPointerType())  // self_ptr
-                }
 
                 // 添加原始参数
                 // 注意：对于聚合类型（struct/array），参数以指针形式传递
@@ -379,39 +363,16 @@ class ASTLower(
                 for (param in funcSymbol.parameters) {
                     val originalType = getIRType(context, param.paramType)
                     originalParamIRTypes.add(originalType)
-                    // 如果是聚合类型，参数类型为指针；否则为原始类型
-                    if (originalType.isAggregate()) {
-                        paramTypes.add(context.myGetPointerType())
-                    } else {
-                        paramTypes.add(originalType)
-                    }
                 }
 
-                // 创建函数类型（返回 void）
-                val funcType = context.myGetFunctionType(context.myGetVoidType(), paramTypes)
+                // 获取函数
+                val func = module.myGetFunction(fnName)
+                    ?: throw IRException("missing Function '$fnName'")
 
-                // 创建函数
-                val func = module.myGetOrCreateFunction(fnName, funcType)
-
-                // 设置函数参数
-                val arguments = mutableListOf<Argument>()
-                // 第一个参数：ret_ptr
-                arguments.add(Argument("ret_ptr", context.myGetPointerType(), func))
-
-                // 如果是方法，添加 self 参数
-                if (isMethod) {
-                    arguments.add(Argument("self", context.myGetPointerType(), func))
-                }
-
-                // 原始参数
+                // 获取函数参数
+                val arguments = func.myGetArguments()
                 // 计算偏移量：ret_ptr 占 1 个位置，如果有 self 则占 2 个位置
                 val paramOffset = if (isMethod) 2 else 1
-                node.params.forEachIndexed { i, param ->
-                    val pattern = param.paramPattern as IdentifierPatternNode
-                    val paramType = paramTypes[i + paramOffset]
-                    arguments.add(Argument(pattern.name.value, paramType, func))
-                }
-                func.setArguments(arguments)
 
                 // 创建入口块
                 val entryBB = func.createBasicBlock("entry")
