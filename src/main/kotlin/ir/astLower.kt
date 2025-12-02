@@ -27,6 +27,7 @@ import ast.FieldExprNode
 import ast.FunctionItemNode
 import ast.FunctionScope
 import ast.FunctionSymbol
+import ast.LoopScope
 import ast.GroupedExprNode
 import ast.IfExprNode
 import ast.ImplItemNode
@@ -38,6 +39,7 @@ import ast.LetStmtNode
 import ast.MethodCallExprNode
 import ast.NamedResolvedType
 import ast.NegationExprNode
+import ast.NeverResolvedType
 import ast.PathExprNode
 import ast.PredicateLoopExprNode
 import ast.PrimitiveResolvedType
@@ -63,6 +65,7 @@ import exception.IRException
 import exception.SemanticException
 import llvm.Argument
 import llvm.ArrayType
+import llvm.BasicBlock
 import llvm.Function
 import llvm.I1Type
 import llvm.IRBuilder
@@ -87,6 +90,40 @@ class ASTLower(
     // 如果当前函数返回 struct/array，则此变量保存传入的返回缓冲区指针（第一个参数）
     // 否则为 null
     private var currentReturnBufferPtr: Value? = null
+
+    /**
+     * 循环上下文类，管理循环的控制流信息
+     */
+    private data class LoopContext(
+        /** 条件检查块（仅 while 循环有），while 循环的 continue 跳转到此块 */
+        val condBB: BasicBlock?,
+        /** 循环体块，loop 循环的 continue 跳转到此块（while 循环不使用此块作为 continue 目标）*/
+        val bodyBB: BasicBlock,
+        /** 循环后续块，break 跳转到此块 */
+        val afterBB: BasicBlock,
+        /** break 表达式的类型 */
+        val breakType: ResolvedType,
+        /** break 的值和来源块（用于创建 PHI 节点） */
+        val breakIncomings: MutableList<Pair<Value, BasicBlock>> = mutableListOf()
+    ) {
+        /** 获取 continue 应该跳转到的块：while 循环跳转到 condBB，loop 循环跳转到 bodyBB */
+        fun getContinueTarget(): BasicBlock = condBB ?: bodyBB
+    }
+
+    // 循环上下文栈，用于处理嵌套循环中的 break/continue
+    private val loopContextStack = ArrayDeque<LoopContext>()
+
+    private fun pushLoopContext(context: LoopContext) {
+        loopContextStack.addLast(context)
+    }
+
+    private fun popLoopContext(): LoopContext {
+        return loopContextStack.removeLast()
+    }
+
+    private fun currentLoopContext(): LoopContext? {
+        return loopContextStack.lastOrNull()
+    }
 
     private fun getArrayCopySize(arrayType: ArrayType): Value {
         val elementSize = getElementSize(arrayType.elementType)
@@ -243,19 +280,129 @@ class ASTLower(
 
     override fun visitPredicateLoopExpr(node: PredicateLoopExprNode) {
         val previousScope = scopeTree.currentScope
-        scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
+        scopeTree.currentScope = node.scopePosition!!
 
+        // 1. 获取当前函数
+        val currentFunc = builder.myGetInsertFunction()
+            ?: throw IRException("PredicateLoopExpr not in a function")
+
+        // 2. 创建基本块
+        val condBB = currentFunc.createBasicBlock("while_cond")
+        val bodyBB = currentFunc.createBasicBlock("while_body")
+        val afterBB = currentFunc.createBasicBlock("while_after")
+
+        // 3. 获取循环的返回类型
+        val loopScope = node.block.scopePosition as? LoopScope
+        val breakType = loopScope?.breakType ?: UnitResolvedType
+
+        // 4. 创建循环上下文并入栈
+        val loopContext = LoopContext(
+            condBB = condBB,
+            bodyBB = bodyBB,
+            afterBB = afterBB,
+            breakType = breakType
+        )
+        pushLoopContext(loopContext)
+
+        // 5. 从当前块跳转到条件检查块
+        builder.createBr(condBB)
+
+        // 6. 生成条件检查块
+        builder.setInsertPoint(condBB)
         node.condition.accept(this)
+        val condValue = node.condition.irValue
+            ?: throw IRException("Condition has no IR value")
+        builder.createCondBr(condValue, bodyBB, afterBB)
+
+        // 7. 生成循环体块
+        builder.setInsertPoint(bodyBB)
         visitBlockExpr(node.block, createScope = false)
+
+        // 如果循环体没有以终结指令结束，跳转回条件检查块
+        val currentBB = builder.myGetInsertBlock()
+        if (currentBB != null && !currentBB.isTerminated()) {
+            builder.createBr(condBB)
+        }
+
+        // 8. 出栈循环上下文
+        popLoopContext()
+
+        // 9. 设置插入点到 after 块
+        builder.setInsertPoint(afterBB)
+
+        // 10. 设置循环表达式的 IR 值
+        // while 循环返回 Unit，irValue 为 null
+        node.irValue = null
+        node.irAddr = null
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
     override fun visitInfiniteLoopExpr(node: InfiniteLoopExprNode) {
         val previousScope = scopeTree.currentScope
-        scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
+        scopeTree.currentScope = node.scopePosition!!
 
+        // 1. 获取当前函数
+        val currentFunc = builder.myGetInsertFunction()
+            ?: throw IRException("InfiniteLoopExpr not in a function")
+
+        // 2. 创建基本块
+        val bodyBB = currentFunc.createBasicBlock("loop_body")
+        val afterBB = currentFunc.createBasicBlock("loop_after")
+
+        // 3. 获取循环的返回类型
+        // 注意：loop 循环的 breakType 在语义分析阶段初始为 UnknownResolvedType，
+        // 如果没有 break 表达式，则保持为 UnknownResolvedType（此时 needsPhi 为 false）
+        // 如果有 break 表达式，则由 break 表达式的值类型决定
+        val loopScope = node.block.scopePosition as? LoopScope
+        val breakType = loopScope?.breakType ?: UnknownResolvedType
+
+        // 4. 判断是否需要 PHI 节点
+        val needsPhi = breakType !is UnitResolvedType
+                && breakType !is UnknownResolvedType
+                && breakType !is NeverResolvedType
+
+        // 5. 创建循环上下文并入栈
+        val loopContext = LoopContext(
+            condBB = null,  // loop 没有条件块
+            bodyBB = bodyBB,
+            afterBB = afterBB,
+            breakType = breakType
+        )
+        pushLoopContext(loopContext)
+
+        // 6. 从当前块跳转到循环体块
+        builder.createBr(bodyBB)
+
+        // 7. 生成循环体块
+        builder.setInsertPoint(bodyBB)
         visitBlockExpr(node.block, createScope = false)
+
+        // 如果循环体没有以终结指令结束，跳转回循环体开始
+        val currentBB = builder.myGetInsertBlock()
+        if (currentBB != null && !currentBB.isTerminated()) {
+            builder.createBr(bodyBB)
+        }
+
+        // 8. 设置插入点到 after 块并创建 PHI（如果需要）
+        builder.setInsertPoint(afterBB)
+
+        // 注意：如果 needsPhi 为 true，语义分析已确保 breakIncomings 不会为空
+        // 因为 breakType 不是 Unit/Unknown/Never 意味着至少有一个带值的 break 表达式
+        if (needsPhi && loopContext.breakIncomings.isNotEmpty()) {
+            val phiType = getIRType(context, breakType)
+            val phi = builder.createPHI(phiType)
+            for ((value, block) in loopContext.breakIncomings) {
+                phi.addIncoming(value, block)
+            }
+            node.irValue = phi
+        } else {
+            node.irValue = null
+        }
+        node.irAddr = null
+
+        // 9. 出栈循环上下文
+        popLoopContext()
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
@@ -1413,17 +1560,54 @@ class ASTLower(
 
     override fun visitBreakExpr(node: BreakExprNode) {
         val previousScope = scopeTree.currentScope
-        scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
+        scopeTree.currentScope = node.scopePosition!!
 
-        node.value?.accept(this)
+        // 1. 获取当前循环上下文
+        val loopContext = currentLoopContext()
+            ?: throw IRException("break outside loop")
+
+        // 2. 如果有值，先求值
+        val breakValue: Value? = if (node.value != null) {
+            node.value.accept(this)
+            node.value.irValue
+        } else {
+            null
+        }
+
+        // 3. 如果循环需要收集 break 值，记录当前值和来源块
+        if (breakValue != null) {
+            val currentBB = builder.myGetInsertBlock()
+                ?: throw IRException("No current basic block")
+            loopContext.breakIncomings.add(Pair(breakValue, currentBB))
+        }
+
+        // 4. 跳转到循环的 after 块
+        builder.createBr(loopContext.afterBB)
+
+        // 5. break 表达式的类型是 Never，不会产生值
+        node.irValue = null
+        node.irAddr = null
 
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
     override fun visitContinueExpr(node: ContinueExprNode) {
         val previousScope = scopeTree.currentScope
-        scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
-        // nothing to do
+        scopeTree.currentScope = node.scopePosition!!
+
+        // 1. 获取当前循环上下文
+        val loopContext = currentLoopContext()
+            ?: throw IRException("continue outside loop")
+
+        // 2. 跳转到目标块
+        // - while 循环：跳转到条件检查块
+        // - loop 循环：跳转到循环体块开始
+        builder.createBr(loopContext.getContinueTarget())
+
+        // 3. continue 表达式的类型是 Never
+        node.irValue = null
+        node.irAddr = null
+
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
