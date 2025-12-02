@@ -1641,42 +1641,15 @@ class ASTLower(
         val args = mutableListOf<Value>()
         args.add(retAlloca)  // ret_ptr 作为第一个参数
         
-        // 处理方法调用（通过 Type::method(&self, ...) 形式调用）
-        if (funcSymbol.isMethod) {
-            // 方法调用：第一个实参是 self
-            // self 参数已经在 node.params[0] 中
-            for (param in node.params) {
-                param.accept(this)
-                val paramValue = param.irValue
-                    ?: throw IRException("Call parameter has no IR value")
-                
-                // 聚合类型参数以指针形式传递
-                val paramIRType = getIRType(context, param.resolvedType)
-                if (paramIRType.isAggregate()) {
-                    // 聚合类型：传递指针
-                    args.add(paramValue)
-                } else {
-                    // 标量类型：传递值
-                    args.add(paramValue)
-                }
-            }
-        } else {
-            // 普通函数调用
-            for (param in node.params) {
-                param.accept(this)
-                val paramValue = param.irValue
-                    ?: throw IRException("Call parameter has no IR value")
-                
-                // 聚合类型参数以指针形式传递
-                val paramIRType = getIRType(context, param.resolvedType)
-                if (paramIRType.isAggregate()) {
-                    // 聚合类型：传递指针
-                    args.add(paramValue)
-                } else {
-                    // 标量类型：传递值
-                    args.add(paramValue)
-                }
-            }
+        // 处理参数（方法调用和普通函数调用参数处理相同）
+        // 注意：方法调用通过 Type::method(&self, ...) 形式时，self 参数已在 node.params[0] 中
+        for (param in node.params) {
+            param.accept(this)
+            val paramValue = param.irValue
+                ?: throw IRException("Call parameter has no IR value")
+            // 聚合类型（struct/array）以指针形式传递，标量类型传值
+            // 但在 IR 层面，两者都是直接添加 irValue（聚合类型的 irValue 就是指针）
+            args.add(paramValue)
         }
         
         // 调用函数（返回 void）
@@ -1760,18 +1733,13 @@ class ASTLower(
         args.add(selfValue)
         
         // 添加其他参数
+        // 聚合类型（struct/array）以指针形式传递，标量类型传值
+        // 但在 IR 层面，两者都是直接添加 irValue（聚合类型的 irValue 就是指针）
         for (param in node.params) {
             param.accept(this)
             val paramValue = param.irValue
                 ?: throw IRException("Method parameter has no IR value")
-            
-            // 聚合类型参数以指针形式传递
-            val paramIRType = getIRType(context, param.resolvedType)
-            if (paramIRType.isAggregate()) {
-                args.add(paramValue)
-            } else {
-                args.add(paramValue)
-            }
+            args.add(paramValue)
         }
         
         // 调用方法（返回 void）
