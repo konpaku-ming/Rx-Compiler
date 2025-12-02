@@ -332,6 +332,17 @@ class ASTLower(
                 val paramTypes = mutableListOf<IRType>()
                 paramTypes.add(context.myGetPointerType())  // ret_ptr
 
+                // 使用 funcSymbol.isMethod 来判断是否是方法
+                val isMethod = funcSymbol.isMethod
+
+                // self 参数的索引常量（如果是方法，self 在 ret_ptr 之后，索引为 1）
+                val selfArgIndex = 1
+
+                // 如果是方法，添加 self 参数（作为指针传递）
+                if (isMethod) {
+                    paramTypes.add(context.myGetPointerType())  // self_ptr
+                }
+
                 // 添加原始参数
                 for (param in funcSymbol.parameters) {
                     paramTypes.add(getIRType(context, param.paramType))
@@ -347,10 +358,18 @@ class ASTLower(
                 val arguments = mutableListOf<Argument>()
                 // 第一个参数：ret_ptr
                 arguments.add(Argument("ret_ptr", context.myGetPointerType(), func))
+
+                // 如果是方法，添加 self 参数
+                if (isMethod) {
+                    arguments.add(Argument("self", context.myGetPointerType(), func))
+                }
+
                 // 原始参数
+                // 计算偏移量：ret_ptr 占 1 个位置，如果有 self 则占 2 个位置
+                val paramOffset = if (isMethod) 2 else 1
                 node.params.forEachIndexed { i, param ->
                     val pattern = param.paramPattern as IdentifierPatternNode
-                    val paramType = paramTypes[i + 1]  // +1 因为第一个是 ret_ptr
+                    val paramType = paramTypes[i + paramOffset]
                     arguments.add(Argument(pattern.name.value, paramType, func))
                 }
                 func.setArguments(arguments)
@@ -362,8 +381,23 @@ class ASTLower(
                 // 保存返回缓冲区指针（第一个参数）
                 currentReturnBufferPtr = arguments[0]
 
-                // 为每个参数创建 alloca 并 store（跳过 ret_ptr）
-                for (i in 1 until arguments.size) {
+                // 如果是方法，处理 self 参数
+                if (isMethod) {
+                    val selfArg = arguments[selfArgIndex]  // self 参数（指针类型）
+                    // self 在语义分析中已经注册为 VariableSymbol
+                    // 对于 &self / &mut self，self 参数是指向结构体的指针
+                    // 在 IR 中，self 的 irValue 直接使用这个指针
+                    // （不需要额外的 alloca，因为我们只需要读取 self.field，不会修改 self 本身）
+                    val selfSymbol = bodyScope.lookupLocal("self") as? VariableSymbol
+                        ?: throw IRException("Method '$fnName' is missing 'self' VariableSymbol in scope")
+                    // self 的类型是结构体类型本身
+                    // 但我们传入的是指向结构体的指针，这正是 visitFieldExpr 等需要的
+                    // 直接将指针参数赋给 irValue
+                    selfSymbol.irValue = selfArg
+                }
+
+                // 为每个原始参数创建 alloca 并 store（跳过 ret_ptr 和 self）
+                for (i in paramOffset until arguments.size) {
                     val arg = arguments[i]
                     val paramType = paramTypes[i]
                     val alloca = builder.createAlloca(paramType)
