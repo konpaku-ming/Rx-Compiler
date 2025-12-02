@@ -226,6 +226,17 @@ class ASTLower(
         }
         node.tailExpr?.accept(this)
 
+        // 设置BlockExpr的irValue
+        // 如果有尾表达式，块的值就是尾表达式的值
+        // 如果没有尾表达式，块的值为Unit，irValue为null
+        if (node.tailExpr != null) {
+            node.irValue = node.tailExpr.irValue
+            node.irAddr = node.tailExpr.irAddr
+        } else {
+            node.irValue = null
+            node.irAddr = null
+        }
+
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
