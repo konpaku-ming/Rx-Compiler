@@ -61,14 +61,12 @@ import ast.TypeCastExprNode
 import ast.UnitResolvedType
 import ast.UnknownResolvedType
 import ast.VariableSymbol
-import ast.stringToChar
 import ast.stringToUInt
 import exception.IRException
 import exception.SemanticException
 import llvm.Argument
 import llvm.ArrayType
 import llvm.BasicBlock
-import llvm.Function
 import llvm.I1Type
 import llvm.IRBuilder
 import llvm.IntegerType
@@ -80,7 +78,6 @@ import llvm.I32Type
 import llvm.I8Type
 import llvm.PointerType
 import llvm.Value
-import llvm.VoidType
 
 class ASTLower(
     private val scopeTree: ScopeTree,
@@ -1673,41 +1670,8 @@ class ASTLower(
         // 先访问 receiver（语义分析阶段可能已将其包装为 BorrowExprNode）
         node.receiver.accept(this)
 
-        // 获取方法名
-        val methodName = node.method.segment.value
-
-        // 获取 receiver 的类型以找到方法所属的结构体
-        val receiverType = node.receiver.resolvedType
-        val structSymbol: StructSymbol
-        val structName: String
-
-        when (receiverType) {
-            is NamedResolvedType -> {
-                structSymbol = receiverType.symbol as? StructSymbol
-                    ?: throw IRException("Method receiver should be a struct")
-                structName = structSymbol.name
-            }
-
-            is ReferenceResolvedType -> {
-                val innerType = receiverType.inner as? NamedResolvedType
-                    ?: throw IRException("Reference inner type is not a NamedResolvedType for method call")
-                structSymbol = innerType.symbol as? StructSymbol
-                    ?: throw IRException("Method receiver should be a struct")
-                structName = structSymbol.name
-            }
-
-            else -> {
-                // 内置方法（如 to_string, len 等）暂不支持 IR 生成
-                throw IRException("Built-in method '$methodName' IR generation not supported yet")
-            }
-        }
-
-        // 获取方法符号
-        val methodSymbol = structSymbol.methods[methodName]
-            ?: throw IRException("Method '$methodName' not found in struct '$structName'")
-
-        // 构建 IR 函数名：methodName
-        val funcName = methodName
+        // 获取 IR 函数名
+        val funcName = node.method.segment.value
 
         // 获取 IR 函数
         val func = module.myGetFunction(funcName)

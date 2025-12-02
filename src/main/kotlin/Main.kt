@@ -10,6 +10,7 @@ import ast.removeComments
 import java.io.File
 import kotlin.system.exitProcess
 import exception.CompilerException
+import ir.ASTLower
 import ir.StructDefiner
 import ir.IntegerConfirmer
 import llvm.LLVMContext
@@ -53,24 +54,21 @@ fun main(args: Array<String>) {
         fifthVisitor.visitCrate(node = ast) // 第五次pass
         val intTypeConfirmer = IntegerConfirmer(semanticScopeTree)
         intTypeConfirmer.visitCrate(node = ast) // 确认整数类型
-/*
+
         val context = LLVMContext()
         val module = Module("main", context)
         val builder = IRBuilder(context)
         val structDefiner = StructDefiner(semanticScopeTree, context, module, builder)
         structDefiner.visitCrate(node = ast)
-*/
-        /*
-                // 生成LLVM IR
-                println("\n--- generating IR ---")
-                val emitter = LLVMEmitter()
-                val irGenerator = LLVMIRGenerator(emitter, semanticScopeTree)
-                irGenerator.visitCrate(ast)
+        val astLower = ASTLower(semanticScopeTree, context, module, builder)
+        astLower.visitCrate(node = ast)
 
-                println("\n--- generated IR ---")
-                println(emitter.getIR())
-                println("-------------------")
-        */
+        // 生成LLVM IR
+        println("\n--- generating IR ---")
+        module.print() // 打印 IR 字符串
+        println("-------------------")
+
+
         println("success")
     } catch (e: CompilerException) {
         println("failed")
