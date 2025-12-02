@@ -125,6 +125,17 @@ class ASTLower(
         return loopContextStack.lastOrNull()
     }
 
+    /**
+     * 创建一个不可达基本块并将插入点设置到该块
+     * 用于 break/continue 后的代码，避免在已终结的块中生成指令
+     */
+    private fun createUnreachableBlock(blockName: String) {
+        val currentFunc = builder.myGetInsertFunction()
+            ?: throw IRException("Cannot create unreachable block outside of function")
+        val unreachableBB = currentFunc.createBasicBlock(blockName)
+        builder.setInsertPoint(unreachableBB)
+    }
+
     private fun getArrayCopySize(arrayType: ArrayType): Value {
         val elementSize = getElementSize(arrayType.elementType)
         val arrayLength = arrayType.numElements
@@ -1584,7 +1595,10 @@ class ASTLower(
         // 4. 跳转到循环的 after 块
         builder.createBr(loopContext.afterBB)
 
-        // 5. break 表达式的类型是 Never，不会产生值
+        // 5. 创建一个不可达块，用于放置 break 后的代码（如果有的话）
+        createUnreachableBlock("break_unreachable")
+
+        // 6. break 表达式的类型是 Never，不会产生值
         node.irValue = null
         node.irAddr = null
 
@@ -1604,7 +1618,10 @@ class ASTLower(
         // - loop 循环：跳转到循环体块开始
         builder.createBr(loopContext.getContinueTarget())
 
-        // 3. continue 表达式的类型是 Never
+        // 3. 创建一个不可达块，用于放置 continue 后的代码（如果有的话）
+        createUnreachableBlock("continue_unreachable")
+
+        // 4. continue 表达式的类型是 Never
         node.irValue = null
         node.irAddr = null
 
