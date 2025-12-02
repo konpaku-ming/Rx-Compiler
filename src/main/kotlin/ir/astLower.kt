@@ -1346,7 +1346,7 @@ class ASTLower(
         // 获取if表达式的返回类型
         val resultType = getIRType(context, node.resolvedType)
         val isAggregate = resultType.isAggregate()
-        val isUnitType = node.resolvedType == ast.UnitResolvedType
+        val isUnitType = node.resolvedType is UnitResolvedType
 
         // 创建基本块
         val thenBB = currentFunc.createBasicBlock("if_then")
