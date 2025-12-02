@@ -644,7 +644,7 @@ class PtrToIntInst(
     }
 
     override fun toString(): String {
-        return "$%$name = ptrtoint ptr ${ptr.myGetName()} to $type"
+        return "%$name = ptrtoint ptr ${ptr.myGetName()} to $type"
     }
 }
 
