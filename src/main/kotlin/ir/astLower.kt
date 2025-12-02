@@ -231,7 +231,7 @@ class ASTLower(
         // 如果没有尾表达式，块的值为Unit，irValue为null
         if (node.tailExpr != null) {
             node.irValue = node.tailExpr.irValue
-            node.irAddr = node.tailExpr.irAddr
+            node.irAddr = null // BlockExpr 不能做左值
         } else {
             node.irValue = null
             node.irAddr = null
@@ -1110,6 +1110,7 @@ class ASTLower(
             is ArrayResolvedType -> baseType
             is ReferenceResolvedType -> baseType.inner as? ArrayResolvedType
                 ?: throw IRException("Reference inner type is not an ArrayResolvedType")
+
             else -> throw IRException("Base of index expression is not an array type: $baseType")
         }
         val arrayType = getIRType(context, arrayResolvedType) as ArrayType
