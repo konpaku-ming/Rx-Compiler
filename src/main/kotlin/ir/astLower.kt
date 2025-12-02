@@ -199,10 +199,42 @@ class ASTLower(
     override fun visitCrate(node: CrateNode) {
         scopeTree.currentScope = node.scopePosition!!
 
+        // 声明内置函数（由外部库提供实现）
+        // 这些函数不使用ret_ptr约定，直接按原函数签名声明
+        declareBuiltinFunctions()
+
         // 依次visit每个item
         for (item in node.items) {
             item.accept(this)
         }
+    }
+
+    /**
+     * 声明外部内置函数
+     * 这些函数由外部库提供实现，编译器只需要声明它们的签名
+     * 注意：这些函数不使用ret_ptr约定，直接按原函数签名声明
+     */
+    private fun declareBuiltinFunctions() {
+        // void printInt(int n)
+        val printIntType = context.myGetFunctionType(
+            context.myGetVoidType(),
+            listOf(context.myGetI32Type())
+        )
+        module.myGetOrCreateFunction("printInt", printIntType)
+
+        // void printlnInt(int n)
+        val printlnIntType = context.myGetFunctionType(
+            context.myGetVoidType(),
+            listOf(context.myGetI32Type())
+        )
+        module.myGetOrCreateFunction("printlnInt", printlnIntType)
+
+        // int getInt()
+        val getIntType = context.myGetFunctionType(
+            context.myGetI32Type(),
+            emptyList()
+        )
+        module.myGetOrCreateFunction("getInt", getIntType)
     }
 
     override fun visitStructItem(node: StructItemNode) {
