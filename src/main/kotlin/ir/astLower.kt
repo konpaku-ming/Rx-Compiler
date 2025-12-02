@@ -1339,9 +1339,7 @@ class ASTLower(
 
         // 获取当前函数以创建新的基本块
         val currentFunc = builder.myGetInsertFunction()
-        if (currentFunc == null) {
-            throw IRException("the if expr '$node' is not in a Function")
-        }
+            ?: throw IRException("the if expr '$node' is not in a Function")
 
         // 获取if表达式的返回类型
         val resultType = getIRType(context, node.resolvedType)
@@ -1361,7 +1359,7 @@ class ASTLower(
         node.thenBranch.accept(this)
         val thenValue = node.thenBranch.irValue
         builder.createBr(mergeBB)
-        val thenEndBB = builder.myGetInsertBlock() ?: thenBB
+        val thenEndBB = builder.myGetInsertBlock() ?: thenBB // then分支结束块
 
         // ===== Else 分支 =====
         builder.setInsertPoint(elseBB)
@@ -1374,7 +1372,7 @@ class ASTLower(
             elseValue = null
         }
         builder.createBr(mergeBB)
-        val elseEndBB = builder.myGetInsertBlock() ?: elseBB
+        val elseEndBB = builder.myGetInsertBlock() ?: elseBB // else分支结束块
 
         // ===== Merge 块 =====
         builder.setInsertPoint(mergeBB)
