@@ -757,7 +757,10 @@ class ASTLower(
         when (val symbol = node.symbol) {
             is VariableSymbol -> {
                 val symbolAddr = symbol.irValue
-                    ?: throw IRException("Variable '${symbol.name}' has no IR value (alloca not created)")
+                    ?: throw IRException(
+                        "Variable '${symbol.name}' has no IR value," +
+                                " in function '${currentFunctionName}'"
+                    )
 
                 val varType = getIRType(context, symbol.type)
                 if (varType.isAggregate()) {
@@ -778,7 +781,10 @@ class ASTLower(
                 val globalVar = module.myGetGlobalVariable(constName)
                     ?: throw IRException("Constant '$constName' is not defined as global variable")
 
-                node.irValue = globalVar
+                val constType = getIRType(context, symbol.type)
+                // 全局常量需要 load 出值，必定为整型
+                val loadedValue = builder.createLoad(constType, globalVar)
+                node.irValue = loadedValue
                 node.irAddr = null // 常量没有地址
             }
 

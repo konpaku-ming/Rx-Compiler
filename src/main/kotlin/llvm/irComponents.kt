@@ -130,7 +130,8 @@ class GlobalVariable(
 ) : Value() {
 
     override fun myGetType(): IRType {
-        return type
+        // 返回指针
+        return PointerType
     }
 
     override fun myGetName(): String {
@@ -548,7 +549,7 @@ class PHINode(
     }
 
     override fun toString(): String {
-        val result = StringBuilder("$name = phi $type")
+        val result = StringBuilder("%$name = phi $type")
 
         incomings.forEachIndexed { index, (value, block) ->
             result.append(" [ ${value.myGetName()}, %${block.myGetName()} ]")

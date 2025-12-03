@@ -3446,6 +3446,7 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
+        node.value.accept(this)
         val pattern = node.pattern
         if (pattern is IdentifierPatternNode) {
             val variable = VariableSymbol(
@@ -3465,7 +3466,6 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             "invalid parameter name: '$pattern'"
         )
 
-        node.value.accept(this)
         if (!typeCheck(node.variableResolvedType, node.value.resolvedType)) {
             throw SemanticException(
                 "Type Mismatch in LetStmt: " +
