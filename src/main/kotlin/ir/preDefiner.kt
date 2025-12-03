@@ -182,8 +182,9 @@ class PreDefiner(
         scopeTree.currentScope = node.scopePosition!!
 
         // 获取函数符号以获取返回类型信息
-        val fnName = node.fnName.value
-        val funcSymbol = scopeTree.lookup(fnName)
+        val fnName = node.actualFuncName
+            ?: throw IRException("function '${node.fnName.value}' has not been renamed")
+        val funcSymbol = scopeTree.lookup(node.fnName.value)
         if (funcSymbol == null || funcSymbol !is FunctionSymbol) {
             throw SemanticException("missing FunctionSymbol")
         }

@@ -54,7 +54,8 @@ data class FunctionItemNode(
     val selfParam: SelfParam?,
     val params: List<FunctionParam>,
     val returnType: TypeNode?,
-    val body: BlockExprNode?
+    val body: BlockExprNode?,
+    var actualFuncName: String? = null
 ) : ItemNode() {
     override val type: NodeType = NodeType.FunctionItem
 

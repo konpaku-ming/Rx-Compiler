@@ -643,11 +643,16 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             }
 
             is ImplScope -> {
+                node.actualFuncName =
+                    ((targetScope.implType as NamedResolvedType).symbol as StructSymbol).name + "." + fnName // IR中用名
                 targetScope.define(symbol)
                 // 第二次pass再把function挂载到struct的底下
             }
 
-            else -> scopeTree.define(symbol)
+            else -> {
+                node.actualFuncName = fnName
+                scopeTree.define(symbol)
+            }
         }
 
         if (node.body != null) {

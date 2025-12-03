@@ -228,8 +228,10 @@ class ASTLower(
         scopeTree.currentScope = node.scopePosition!!
 
         // 获取函数符号以获取返回类型信息
-        val fnName = node.fnName.value
-        val funcSymbol = scopeTree.lookup(fnName)
+
+        val fnName = node.actualFuncName
+            ?: throw IRException("function '${node.fnName.value}' has not been renamed")
+        val funcSymbol = scopeTree.lookup(node.fnName.value)
         if (funcSymbol == null || funcSymbol !is FunctionSymbol) {
             throw SemanticException("missing FunctionSymbol")
         }
@@ -1569,12 +1571,12 @@ class ASTLower(
         val funcPath = node.func as? PathExprNode
             ?: throw IRException("CallExpr func is not a PathExprNode")
 
-        // 从 PathExprNode 获取函数符号（语义分析阶段已绑定）
-        val funcSymbol = funcPath.symbol as? FunctionSymbol
-            ?: throw IRException("CallExpr func does not refer to a FunctionSymbol")
-
         // 获取函数名
-        val funcName = funcSymbol.name
+        val funcName = if (funcPath.second == null) {
+            funcPath.first.segment.value
+        } else {
+            funcPath.first.segment.value + "." + funcPath.second.segment.value
+        }
 
         // 特判：当调用的函数名为 exit 且出现在 main 函数中时，让 main 函数返回 0
         // exit 只会在 main 函数中出现，此时直接跳转到 main 的返回块（返回块已设置返回 0）
@@ -1671,7 +1673,16 @@ class ASTLower(
         node.receiver.accept(this)
 
         // 获取 IR 函数名
-        val funcName = node.method.segment.value
+        val structSymbol = when (val receiverType = node.receiver.resolvedType) {
+            is NamedResolvedType -> receiverType.symbol as? StructSymbol
+                ?: throw IRException("Method receiver's symbol is not StructSymbol")
+
+            is ReferenceResolvedType -> (receiverType.inner as? NamedResolvedType)?.symbol as? StructSymbol
+                ?: throw IRException("Method receiver's inner symbol is not StructSymbol")
+
+            else -> throw IRException("Method receiver is not a struct type: $receiverType")
+        }
+        val funcName = structSymbol.name + "." + node.method.segment.value // 方法全名：StructName.methodName
 
         // 获取 IR 函数
         val func = module.myGetFunction(funcName)
