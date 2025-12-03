@@ -273,4 +273,38 @@ class IRBuilder(val context: LLVMContext) {
 
         return createCall(memcpyFunc, args, "")
     }
+
+    fun createMemSet(dest: Value, value: Value, size: Value, isVolatile: Boolean): CallInst {
+        if (insertBlock == null) {
+            throw IRException("No insert block")
+        }
+        // 获取当前函数所属的Module
+        val currentFunc = myGetInsertFunction() ?: throw IRException("No insert function")
+        val module = currentFunc.parent
+        // 检测size类型是否为i32整数类型
+        if (size.myGetType() != context.myGetI32Type()) {
+            throw IRException("Size type must be i32")
+        }
+        // memset函数类型：void (ptr, i8, i32, i1)
+        val voidType = context.myGetVoidType()
+        val ptrType = context.myGetPointerType()
+        val i8Type = context.myGetI8Type()
+        val i1Type = context.myGetI1Type()
+
+        val paramTypes = listOf(ptrType, i8Type, context.myGetI32Type(), i1Type)
+        val memsetType = context.myGetFunctionType(voidType, paramTypes)
+        val memsetFunc = module.myGetOrCreateFunction("llvm.memset.p0.i32", memsetType)
+        val args = mutableListOf<Value>().apply {
+            add(dest)
+            add(value)
+            add(size)
+            val volatileConst = context.myGetIntConstant(
+                context.myGetI1Type(),
+                if (isVolatile) 1U else 0U,
+            )
+            add(volatileConst)
+        }
+
+        return createCall(memsetFunc, args, "")
+    }
 }
