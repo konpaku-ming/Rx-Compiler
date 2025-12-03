@@ -208,8 +208,4 @@ class ScopeTree {
     fun lookup(name: String): Symbol? {
         return currentScope.lookup(name)
     }
-
-    fun lookupLocal(name: String): Symbol? {
-        return currentScope.lookupLocal(name)
-    }
 }

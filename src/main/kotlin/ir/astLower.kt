@@ -29,7 +29,6 @@ import ast.FunctionScope
 import ast.FunctionSymbol
 import ast.LoopScope
 import ast.GroupedExprNode
-import ast.IdentifierPatternNode
 import ast.IfExprNode
 import ast.ImplItemNode
 import ast.IndexExprNode
@@ -64,7 +63,6 @@ import ast.VariableSymbol
 import ast.stringToUInt
 import exception.IRException
 import exception.SemanticException
-import llvm.Argument
 import llvm.ArrayType
 import llvm.BasicBlock
 import llvm.I1Type
@@ -74,9 +72,6 @@ import llvm.LLVMContext
 import llvm.Module
 import llvm.IRType
 import llvm.StructType
-import llvm.I32Type
-import llvm.I8Type
-import llvm.PointerType
 import llvm.Value
 
 class ASTLower(
