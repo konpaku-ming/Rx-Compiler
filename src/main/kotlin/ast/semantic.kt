@@ -643,14 +643,11 @@ class FirstVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
             }
 
             is ImplScope -> {
-                node.actualFuncName =
-                    ((targetScope.implType as NamedResolvedType).symbol as StructSymbol).name + "." + fnName // IR中用名
                 targetScope.define(symbol)
                 // 第二次pass再把function挂载到struct的底下
             }
 
             else -> {
-                node.actualFuncName = fnName
                 scopeTree.define(symbol)
             }
         }
@@ -3342,6 +3339,29 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!!
         val fnName = node.fnName.value
+
+        var targetScope = scopeTree.currentScope
+        while (targetScope.kind != ScopeKind.Impl &&
+            targetScope.kind != ScopeKind.Trait &&
+            targetScope.parent != null
+        ) {
+            targetScope = targetScope.parent!!
+        }
+        when (targetScope) {
+            is TraitScope -> {
+                node.actualFuncName = fnName
+            }
+
+            is ImplScope -> {
+                node.actualFuncName =
+                    ((targetScope.implType as NamedResolvedType).symbol as StructSymbol).name + "." + fnName
+            }
+
+            else -> {
+                node.actualFuncName = fnName
+            }
+        }
+
         val functionSymbol = scopeTree.lookup(fnName)
         if (functionSymbol == null || functionSymbol !is FunctionSymbol) {
             throw SemanticException("missing FunctionSymbol")
