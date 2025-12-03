@@ -96,6 +96,55 @@ class ASTLower(
     // 当前函数的名称（用于判断是否是 main 函数）
     private var currentFunctionName: String? = null
 
+    // 当前处理的 struct 名称（在 visitImplItem 中设置）
+    private var currentStructName: String? = null
+
+    /**
+     * 获取函数的 IR 名称
+     * 对于 associated function/method，名称为 StructName.funcName
+     * 对于普通函数，名称为 funcName
+     */
+    private fun getIRFunctionName(funcName: String, funcSymbol: FunctionSymbol): String {
+        return if (funcSymbol.isAssociated && currentStructName != null) {
+            "${currentStructName}.${funcName}"
+        } else {
+            funcName
+        }
+    }
+
+    /**
+     * 获取调用函数的 IR 名称
+     * 对于 associated function，从 path 中获取 struct 名称
+     * 对于普通函数，直接返回函数名
+     */
+    private fun getCallIRFunctionName(funcPath: PathExprNode, funcSymbol: FunctionSymbol): String {
+        return if (funcSymbol.isAssociated && funcPath.second != null) {
+            // 有两段的 path，如 Type::method
+            val structName = funcPath.first.segment.value
+            val funcName = funcPath.second!!.segment.value
+            "${structName}.${funcName}"
+        } else {
+            funcSymbol.name
+        }
+    }
+
+    /**
+     * 获取方法调用的 IR 函数名称
+     * 从 receiver 的类型中获取 struct 名称
+     */
+    private fun getMethodCallIRFunctionName(receiver: ResolvedType, methodName: String): String {
+        val structName = when (receiver) {
+            is NamedResolvedType -> receiver.name
+            is ReferenceResolvedType -> (receiver.inner as? NamedResolvedType)?.name
+            else -> null
+        }
+        return if (structName != null) {
+            "${structName}.${methodName}"
+        } else {
+            methodName
+        }
+    }
+
     /**
      * 循环上下文类，管理循环的控制流信息
      */
@@ -235,7 +284,10 @@ class ASTLower(
         }
 
         if (node.body != null) {
-            // 保存当前函数名
+            // 保存当前函数名（用于恢复嵌套函数后的状态）
+            val previousFunctionName = currentFunctionName
+            val previousReturnBufferPtr = currentReturnBufferPtr
+            val previousReturnBlock = currentReturnBlock
             currentFunctionName = fnName
 
             // 获取原始返回类型
@@ -326,9 +378,10 @@ class ASTLower(
                     originalParamIRTypes.add(originalType)
                 }
 
-                // 获取函数
-                val func = module.myGetFunction(fnName)
-                    ?: throw IRException("missing Function '$fnName'")
+                // 获取函数（使用 mangled name）
+                val irFuncName = getIRFunctionName(fnName, funcSymbol)
+                val func = module.myGetFunction(irFuncName)
+                    ?: throw IRException("missing Function '$irFuncName'")
 
                 // 获取函数参数
                 val arguments = func.myGetArguments()
@@ -426,10 +479,10 @@ class ASTLower(
                 builder.createRet(null)  // ret void
             }
 
-            // 清理状态
-            currentReturnBufferPtr = null
-            currentReturnBlock = null
-            currentFunctionName = null
+            // 恢复状态（用于支持嵌套函数）
+            currentReturnBufferPtr = previousReturnBufferPtr
+            currentReturnBlock = previousReturnBlock
+            currentFunctionName = previousFunctionName
         }
 
         scopeTree.currentScope = previousScope // 还原scope状态
@@ -452,10 +505,17 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!!
 
+        // 获取 impl 的 struct 名称
+        val implScope = node.implScopePosition
+        val structName = (implScope?.implType as? NamedResolvedType)?.name
+        val previousStructName = currentStructName
+        currentStructName = structName
+
         for (item in node.associatedItems) {
             item.accept(this)
         }
 
+        currentStructName = previousStructName // 还原 struct 名称
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
@@ -1589,9 +1649,10 @@ class ASTLower(
             return
         }
 
-        // 获取 IR 函数
-        val func = module.myGetFunction(funcName)
-            ?: throw IRException("Function '$funcName' not found in module")
+        // 获取 IR 函数（使用 mangled name）
+        val irFuncName = getCallIRFunctionName(funcPath, funcSymbol)
+        val func = module.myGetFunction(irFuncName)
+            ?: throw IRException("Function '$irFuncName' not found in module")
 
         // 特判：内建I/O函数不使用ret_ptr约定，直接按原函数签名调用
         // printInt(int n) -> void
@@ -1670,12 +1731,37 @@ class ASTLower(
         // 先访问 receiver（语义分析阶段可能已将其包装为 BorrowExprNode）
         node.receiver.accept(this)
 
-        // 获取 IR 函数名
-        val funcName = node.method.segment.value
+        val methodName = node.method.segment.value
+        val receiverType = node.receiver.resolvedType
+
+        // 检查是否是内置方法
+        // 数组的 .len() 方法返回数组长度
+        val isArrayLen = when (receiverType) {
+            is ArrayResolvedType -> methodName == "len"
+            is ReferenceResolvedType -> receiverType.inner is ArrayResolvedType && methodName == "len"
+            else -> false
+        }
+
+        if (isArrayLen) {
+            // 数组的 .len() 方法是内置的，直接返回编译时已知的长度
+            val arrayType = when (receiverType) {
+                is ArrayResolvedType -> receiverType
+                is ReferenceResolvedType -> receiverType.inner as ArrayResolvedType
+                else -> throw IRException("Unexpected type for array.len()")
+            }
+            val lengthConst = context.myGetIntConstant(context.myGetI32Type(), arrayType.length.toUInt())
+            node.irValue = lengthConst
+            node.irAddr = null
+            scopeTree.currentScope = previousScope
+            return
+        }
+
+        // 获取 IR 函数名（使用 mangled name）
+        val irFuncName = getMethodCallIRFunctionName(receiverType, methodName)
 
         // 获取 IR 函数
-        val func = module.myGetFunction(funcName)
-            ?: throw IRException("Method function '$funcName' not found in module")
+        val func = module.myGetFunction(irFuncName)
+            ?: throw IRException("Method function '$irFuncName' not found in module")
 
         // 获取调用的返回类型
         val returnType = getIRType(context, node.resolvedType)

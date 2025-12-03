@@ -29,18 +29,22 @@ import ast.GroupedExprNode
 import ast.IdentifierPatternNode
 import ast.IfExprNode
 import ast.ImplItemNode
+import ast.ImplScope
 import ast.IndexExprNode
 import ast.InfiniteLoopExprNode
 import ast.IntLiteralExprNode
 import ast.LazyBooleanExprNode
 import ast.LetStmtNode
 import ast.MethodCallExprNode
+import ast.NamedResolvedType
 import ast.NegationExprNode
 import ast.PathExprNode
 import ast.PredicateLoopExprNode
 import ast.RawCStringLiteralExprNode
 import ast.RawStringLiteralExprNode
 import ast.ReturnExprNode
+import ast.Scope
+import ast.ScopeKind
 import ast.ScopeTree
 import ast.StringLiteralExprNode
 import ast.StructExprNode
@@ -64,6 +68,22 @@ class PreDefiner(
     private val module: Module,
     private val builder: IRBuilder
 ) : ASTVisitor {
+    // 当前处理的 struct 名称（在 visitImplItem 中设置）
+    private var currentStructName: String? = null
+
+    /**
+     * 获取函数的 IR 名称
+     * 对于 associated function/method，名称为 StructName.funcName
+     * 对于普通函数，名称为 funcName
+     */
+    private fun getIRFunctionName(funcName: String, funcSymbol: FunctionSymbol): String {
+        return if (funcSymbol.isAssociated && currentStructName != null) {
+            "${currentStructName}.${funcName}"
+        } else {
+            funcName
+        }
+    }
+
     override fun visitCrate(node: CrateNode) {
         scopeTree.currentScope = node.scopePosition!!
 
@@ -252,8 +272,9 @@ class PreDefiner(
                 // 创建函数类型（返回 void）
                 val funcType = context.myGetFunctionType(context.myGetVoidType(), paramTypes)
 
-                // 创建函数
-                val func = module.myGetOrCreateFunction(fnName, funcType)
+                // 创建函数（使用 mangled name）
+                val irFuncName = getIRFunctionName(fnName, funcSymbol)
+                val func = module.myGetOrCreateFunction(irFuncName, funcType)
 
                 // 设置函数参数
                 val arguments = mutableListOf<Argument>()
@@ -299,10 +320,17 @@ class PreDefiner(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!!
 
+        // 获取 impl 的 struct 名称
+        val implScope = node.implScopePosition
+        val structName = (implScope?.implType as? NamedResolvedType)?.name
+        val previousStructName = currentStructName
+        currentStructName = structName
+
         for (item in node.associatedItems) {
             item.accept(this)
         }
 
+        currentStructName = previousStructName // 还原 struct 名称
         scopeTree.currentScope = previousScope // 还原scope状态
     }
 
