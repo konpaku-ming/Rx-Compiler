@@ -351,7 +351,7 @@ class LoadInst(
     init {
         // 检查ptr类型是否为指针
         if (!ptr.myGetType().isPointer()) {
-            throw IRException("LoadInst pointer operand must be of pointer type")
+            throw IRException("LoadInst pointer operand '${ptr.myGetName()}' must be of pointer type")
         }
         addOperand(ptr)
     }

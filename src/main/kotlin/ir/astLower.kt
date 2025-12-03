@@ -131,23 +131,16 @@ class ASTLower(
     }
 
     private fun getArrayCopySize(arrayType: ArrayType): Value {
-        val elementSize = getElementSize(arrayType.elementType)
+        // 使用 GEP + PtrToInt 来计算数组的字节大小
+        // 这种方法可以正确处理 struct 数组等复杂元素类型
         val arrayLength = arrayType.numElements
-        val totalSize = elementSize * arrayLength
-        return context.myGetIntConstant(context.myGetI32Type(), totalSize.toUInt())
-    }
-
-    // 元素大小计算（字节）
-    private fun getElementSize(type: IRType): Int {
-        return when (type) {
-            is I1Type -> 1
-            is I8Type -> 1
-            is I32Type -> 4
-            is PointerType -> 4
-            is StructType -> throw IRException("StructType size must be calculated from sizeFunc")
-            is ArrayType -> type.numElements * getElementSize(type.elementType)
-            else -> throw IRException("Unknown type size: $type")
-        }
+        val lengthConst = context.myGetIntConstant(context.myGetI32Type(), arrayLength.toUInt())
+        val gepInst = builder.createGEP(
+            arrayType.elementType,
+            context.myGetNullPtrConstant(),
+            listOf(lengthConst)
+        )
+        return builder.createPtrToInt(context.myGetI32Type(), gepInst)
     }
 
     private fun isUnsignedType(type: ResolvedType): Boolean {
@@ -785,10 +778,7 @@ class ASTLower(
                 val globalVar = module.myGetGlobalVariable(constName)
                     ?: throw IRException("Constant '$constName' is not defined as global variable")
 
-                val constType = getIRType(context, symbol.type)
-                // 全局常量需要 load 出值，必定为整型
-                val loadedValue = builder.createLoad(constType, globalVar)
-                node.irValue = loadedValue
+                node.irValue = globalVar
                 node.irAddr = null // 常量没有地址
             }
 
