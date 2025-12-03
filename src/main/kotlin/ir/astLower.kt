@@ -1407,6 +1407,37 @@ class ASTLower(
         // 在栈上分配数组空间
         val arrayAlloca = builder.createAlloca(arrayType)
 
+        // 特判：如果重复元素是整数字面量 0，使用 memset 进行初始化
+        val elemExpr = node.element
+        if (elemExpr is IntLiteralExprNode) {
+            // 解析整数字面量的值（去掉类型后缀）
+            val rawValue = when {
+                elemExpr.raw.endsWith("isize") -> elemExpr.raw.removeSuffix("isize")
+                elemExpr.raw.endsWith("usize") -> elemExpr.raw.removeSuffix("usize")
+                elemExpr.raw.endsWith("i32") -> elemExpr.raw.removeSuffix("i32")
+                elemExpr.raw.endsWith("u32") -> elemExpr.raw.removeSuffix("u32")
+                else -> elemExpr.raw
+            }
+            val intValue = stringToUInt(rawValue)
+            if (intValue == 0U) {
+                // 使用 memset 将整个数组初始化为 0
+                // 计算数组总字节大小
+                val totalSize = getArrayCopySize(arrayType)
+                // 创建字节值 0（i8 类型）
+                val zeroByteValue = context.myGetIntConstant(context.myGetI8Type(), 0U)
+                // 调用 memset
+                builder.createMemSet(arrayAlloca, zeroByteValue, totalSize, false)
+
+                // 数组表达式的值是数组的地址（指针）
+                node.irValue = arrayAlloca
+                node.irAddr = null // 数组字面量没有地址（不是左值）
+
+                scopeTree.currentScope = previousScope // 还原scope状态
+                return
+            }
+        }
+
+        // 回退：元素不是整数 0，使用逐元素初始化
         node.element.accept(this)
 
         // 将重复元素存储到数组的每个位置
