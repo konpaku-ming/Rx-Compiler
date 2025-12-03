@@ -101,14 +101,11 @@ gradlew.bat build
 如果安装了 LLVM 工具链，可以进一步编译和执行：
 
 ```bash
-# 使用 clang 编译 LLVM IR 到可执行文件
-clang main.ll -o program
+# 使用 clang-15 编译 LLVM IR 到可执行文件
+clang-15 -o program main.ll builtin
 
 # 运行程序
 ./program
-
-# 或者使用 lli 直接解释执行 IR
-lli main.ll
 ```
 
 ## 项目结构
@@ -125,7 +122,7 @@ Rx-Compiler/
 │   │   │   ├── token.kt       # Token 定义
 │   │   │   ├── scope.kt       # 作用域管理
 │   │   │   ├── semantic.kt    # 语义分析
-│   │   │   ├── visitor.kt     # AST 访问者
+│   │   │   ├── visitor.kt     # AST visitor-accept的接口
 │   │   │   └── preprocess.kt  # 预处理
 │   │   ├── ir/                # IR 生成
 │   │   │   ├── astLower.kt    # AST 到 IR 降低
@@ -185,11 +182,11 @@ Rx-Compiler/
 4. **语义分析** - 多遍扫描
    - 第一遍：收集声明
    - 第二遍：解析类型
-   - 第三遍：类型检查
-   - 第四遍：其他语义检查
-   - 第五遍：最终检查
-5. **类型确认** - 确认整数类型
-6. **预定义** - 定义结构体和全局常量
+   - 第三遍：解析常量上下文、控制流检查
+   - 第四遍：Impl-Trait检查
+   - 第五遍：类型检查、其余的语义检查
+5. **类型确认** - 确认整数字面量类型
+6. **预定义** - 定义结构体和全局常量，声明函数
 7. **IR 生成** - AST → LLVM IR
 8. **输出** - 写入 `main.ll` 文件
 
@@ -206,9 +203,9 @@ Rx 语言提供以下内置函数：
 
 ## 已知限制
 
-- 仅支持整数类型的 `const` 常量 (其他类型常量支持Semantic Check)
-- 不支持浮点数类型 (支持Semantic Check)
-- 不支持泛型 (支持Semantic Check)
+- 仅支持整数类型的 `const` 常量 (语义检查支持其他类型常量)
+- 不支持浮点数类型 (语义检查支持)
+- 不支持泛型 (语义检查支持)
 - 不支持闭包和匿名函数
 - 不支持模块系统
 
@@ -216,7 +213,7 @@ Rx 语言提供以下内置函数：
 
 更多技术文档请参阅 `docs/` 目录：
 
-- [LLVM IR 生成指南](docs/LLVM_IR_Generation_Guide.md) - 详细的 IR 生成文档
+- [LLVM IR 生成指南](docs/LLVM_IR_Generation_Guide.md) - 详细的 IR 生成文档（其中部分实现方式与实际不同）
 
 ## 许可证
 
@@ -226,4 +223,5 @@ Rx 语言提供以下内置函数：
 
 - LLVM 项目 - https://llvm.org/
 - Kotlin - https://kotlinlang.org/
-- Rust 语言设计 - 本项目的语法设计参考了 Rust
+- Rust 语言设计 - 本项目的语法设计参考了 Rust，详细语法见[The Rx Reference](https://github.com/peterzheng98/RCompiler-Spec)
+- 特别感谢[@algebraic-arima](https://github.com/algebraic-arima) - 为本项目的实现提供了很多建议与帮助
