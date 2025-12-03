@@ -227,7 +227,10 @@ class ASTLower(
         val previousScope = scopeTree.currentScope
         scopeTree.currentScope = node.scopePosition!!
 
-        // 获取函数符号以获取返回类型信息
+        val previousInsertBlock = builder.myGetInsertBlock()
+        val previousReturnBufferPtr: Value? = currentReturnBufferPtr
+        val previousReturnBlock: BasicBlock? = currentReturnBlock
+        val previousFunctionName: String? = currentFunctionName
 
         val fnName = node.actualFuncName
             ?: throw IRException("function '${node.fnName.value}' has not been renamed")
@@ -429,9 +432,10 @@ class ASTLower(
             }
 
             // 清理状态
-            currentReturnBufferPtr = null
-            currentReturnBlock = null
-            currentFunctionName = null
+            currentReturnBufferPtr = previousReturnBufferPtr
+            currentReturnBlock = previousReturnBlock
+            currentFunctionName = previousFunctionName
+            if (previousInsertBlock != null) builder.setInsertPoint(previousInsertBlock)
         }
 
         scopeTree.currentScope = previousScope // 还原scope状态

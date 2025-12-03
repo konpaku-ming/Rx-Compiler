@@ -166,7 +166,7 @@ class Function(
             "$name.${bbNameMap[name]}"
         } else {
             bbNameMap[name] = 0
-            name
+            "$name.0"
         }
         val bb = BasicBlock(actualName, this)
         addBasicBlock(bb)
