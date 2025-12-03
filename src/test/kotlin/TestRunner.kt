@@ -14,7 +14,7 @@ import ast.SecondVisitor
 import ast.ThirdVisitor
 import ast.FourthVisitor
 import ast.FifthVisitor
-import ir.StructDefiner
+import ir.PreDefiner
 import llvm.IRBuilder
 import llvm.LLVMContext
 import llvm.Module
@@ -155,7 +155,7 @@ private fun compileOne(file: Path, expectedPass: Boolean, showSource: Boolean): 
         val context = LLVMContext()
         val module = Module("main", context)
         val builder = IRBuilder(context)
-        StructDefiner(semanticScopeTree, context, module, builder).visitCrate(ast)
+        PreDefiner(semanticScopeTree, context, module, builder).visitCrate(ast)
 
         CaseResult(file, expectedPass, actualPass = true, sourcePreview = sourcePreview)
     } catch (e: CompilerException) {
