@@ -627,22 +627,15 @@ class ASTLower(
         scopeTree.currentScope = node.scopePosition!! // 找到所在的scope
 
         val varType = getIRType(context, node.variableResolvedType)
+        val allocaInst = builder.createAlloca(varType) // 分配变量的栈空间，由builder自己取名
+
         val variableSymbol = node.symbol as? VariableSymbol
             ?: throw IRException("LetStmtNode's symbol is not VariableSymbol")
         // 根据类型选择初始化策略
-        node.value.accept(this)
-        if (node.value.irAddr == null && varType.isAggregate()) {
-            // value为右值且为聚合类型，直接使用value的地址
-            variableSymbol.irValue = node.value.irValue
-
-            scopeTree.currentScope = previousScope // 还原scope状态
-            return
-        }
-
-        val allocaInst = builder.createAlloca(varType) // 分配变量的栈空间，由builder自己取名
         when (varType) {
             is StructType -> {
                 // 结构体：使用 memcpy
+                node.value.accept(this)
                 val srcAddr = node.value.irValue
                     ?: throw IRException("IR Value not initialized in ${node.value}")
                 // 从变量的resolved type获取结构体名称
@@ -656,6 +649,7 @@ class ASTLower(
 
             is ArrayType -> {
                 // 数组：使用 memcpy
+                node.value.accept(this)
                 val srcAddr = node.value.irValue
                     ?: throw IRException("IR Value not initialized in ${node.value}")
                 val size = getArrayCopySize(varType) // i32的Value
@@ -664,6 +658,7 @@ class ASTLower(
 
             else -> {
                 // 标量：使用 load + store
+                node.value.accept(this)
                 val initValue = node.value.irValue // 一般类型会给一个值
                     ?: throw IRException("IR Value not initialized in ${node.value}")
                 builder.createStore(initValue, allocaInst)
@@ -817,33 +812,47 @@ class ASTLower(
         // 获取内部表达式的地址
         // 对于左值表达式（变量、字段访问、索引访问等），irAddr 包含其存储地址
         // 对于右值表达式（字面量、临时值等），irAddr 为 null，需要先分配空间再借用
-        if (node.expr.irAddr != null) {
+        val innerAddr = if (node.expr.irAddr != null) {
             // 左值：直接使用其地址
-            node.irValue = node.expr.irAddr!!
+            node.expr.irAddr!!
         } else {
             // 右值：需要先分配空间，初始化后再借用
             val innerValue = node.expr.irValue
                 ?: throw IRException("Cannot borrow rvalue: expression has no value: ${node.expr}")
+            val innerType = getIRType(context, node.expr.resolvedType)
+
+            // 在栈上分配空间
+            val tempAlloca = builder.createAlloca(innerType)
+
             // 根据类型选择初始化策略
-            when (val innerType = getIRType(context, node.expr.resolvedType)) {
+            when (innerType) {
                 is StructType -> {
-                    // 结构体：直接获得地址
-                    node.irValue = node.expr.irValue
+                    // 结构体：使用 memcpy
+                    val structName = (node.expr.resolvedType as? NamedResolvedType)?.name
+                        ?: throw IRException("Cannot borrow struct rvalue: expected NamedResolvedType but got ${node.expr.resolvedType}")
+                    val sizeFunc = module.myGetFunction("${structName}.size")
+                        ?: throw IRException("missing sizeFunc for struct '$structName'")
+                    val size = builder.createCall(sizeFunc, emptyList())
+                    builder.createMemCpy(tempAlloca, innerValue, size, false)
                 }
 
                 is ArrayType -> {
-                    // 数组：直接获得地址
-                    node.irValue = node.expr.irValue
+                    // 数组：使用 memcpy
+                    val size = getArrayCopySize(innerType)
+                    builder.createMemCpy(tempAlloca, innerValue, size, false)
                 }
 
                 else -> {
                     // 标量类型：使用 store
-                    val tempAlloca = builder.createAlloca(innerType)
                     builder.createStore(innerValue, tempAlloca)
-                    node.irValue = tempAlloca
                 }
             }
+
+            tempAlloca
         }
+
+        // 借用表达式的值就是内部表达式的地址（指针）
+        node.irValue = innerAddr
         // 借用表达式本身没有地址（不能对借用再取地址，除非先存储到变量）
         node.irAddr = null
 
