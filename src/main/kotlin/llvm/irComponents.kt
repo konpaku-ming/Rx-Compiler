@@ -238,8 +238,32 @@ class Function(
         result.append(") ")
         if (isDefined) {
             result.append("{\n")
+
+            // Collect all alloca instructions from all basic blocks
+            val allAllocas = basicBlocks.flatMap { bb ->
+                bb.instructions.filterIsInstance<AllocaInst>()
+            }
+
+            // Get the entry block (first basic block)
+            val entryBlock = basicBlocks.firstOrNull()
+
+            // Print each basic block, hoisting allocas to the entry block
+
             basicBlocks.forEach { bb ->
-                result.append("${bb}\n")
+                result.append("${bb.name}:\n")
+                // If this is the entry block, print all allocas first
+                if (bb === entryBlock) {
+                    allAllocas.forEach { alloca ->
+                        result.append("  ${alloca}\n")
+                    }
+                }
+
+                // Print non-alloca instructions
+                bb.instructions.forEach { inst ->
+                    if (inst !is AllocaInst) {
+                        result.append("  ${inst}\n")
+                    }
+                }
             }
             result.append("}")
         }
