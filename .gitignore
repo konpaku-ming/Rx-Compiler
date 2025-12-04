@@ -43,3 +43,8 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+
+### Generated files ###
+main.ll
+main_test
+main_test_asan
