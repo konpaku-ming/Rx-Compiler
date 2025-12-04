@@ -46,3 +46,5 @@ bin/
 
 ### Generated files ###
 main.ll
+main_test
+main_test_asan
