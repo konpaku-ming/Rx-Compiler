@@ -18,19 +18,28 @@ import llvm.Module
 import llvm.IRBuilder
 
 fun main(args: Array<String>) {
-    if (args.size != 1) {
-        System.err.println("expected source code file")
-        exitProcess(1)
-    }
-
-    val filePath = args[0]
     val sourceCode: String
-    try {
-        val file = File(filePath)
-        sourceCode = file.readText(Charsets.UTF_8)
-    } catch (e: Exception) {
-        System.err.println("error: cannot read file '$filePath': ${e.message}")
+    
+    // Support reading from STDIN when no args or "-" is passed
+    if (args.isEmpty() || args[0] == "-") {
+        try {
+            sourceCode = System.`in`.bufferedReader().use { it.readText() }
+        } catch (e: Exception) {
+            System.err.println("error: cannot read from stdin: ${e.message}")
+            exitProcess(1)
+        }
+    } else if (args.size != 1) {
+        System.err.println("expected source code file or '-' for stdin")
         exitProcess(1)
+    } else {
+        val filePath = args[0]
+        try {
+            val file = File(filePath)
+            sourceCode = file.readText(Charsets.UTF_8)
+        } catch (e: Exception) {
+            System.err.println("error: cannot read file '$filePath': ${e.message}")
+            exitProcess(1)
+        }
     }
 
     // println("--- source file ---")
@@ -63,18 +72,23 @@ fun main(args: Array<String>) {
         val astLower = ASTLower(semanticScopeTree, context, module, builder)
         astLower.visitCrate(node = ast)
 
-        // 生成LLVM IR并写入文件
+        // 生成LLVM IR
         val irContent = module.print()
-        try {
-            File("main.ll").writeText(irContent, Charsets.UTF_8)
-            println("IR has been written in main.ll")
-        } catch (e: Exception) {
-            System.err.println("error: cannot write file 'main.ll': ${e.message}")
-            exitProcess(1)
+        
+        // If reading from STDIN (no args or "-"), output to STDOUT
+        if (args.isEmpty() || args[0] == "-") {
+            print(irContent)
+        } else {
+            // Otherwise write to file as before
+            try {
+                File("main.ll").writeText(irContent, Charsets.UTF_8)
+                println("IR has been written in main.ll")
+            } catch (e: Exception) {
+                System.err.println("error: cannot write file 'main.ll': ${e.message}")
+                exitProcess(1)
+            }
+            println("success")
         }
-
-
-        println("success")
     } catch (e: CompilerException) {
         println("failed")
         System.err.println(e.message)
