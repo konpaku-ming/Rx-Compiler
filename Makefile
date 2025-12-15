@@ -2,7 +2,8 @@
 # Requires: JDK 21+, Gradle
 
 # Paths
-JAVA := /usr/lib/jvm/temurin-21-jdk-amd64/bin/java
+# Allow overriding JAVA via environment variable, default to system java
+JAVA ?= java
 GRADLE := ./gradlew
 BUILD_DIR := build/install/Rx-Compiler
 LIB_DIR := $(BUILD_DIR)/lib
@@ -20,7 +21,7 @@ build:
 # Run target: run compiler reading from STDIN, output IR to STDOUT, builtin.c to STDERR
 .PHONY: run
 run:
-	@$(JAVA) -cp "$(JAVA_CP)" $(MAIN_CLASS) - && cat $(BUILTIN_FILE) >&2
+	@$(JAVA) -cp "$(JAVA_CP)" $(MAIN_CLASS) - && test -f $(BUILTIN_FILE) && cat $(BUILTIN_FILE) >&2
 
 # Clean build artifacts
 .PHONY: clean
@@ -37,3 +38,7 @@ help:
 	@echo "  run    - Run the compiler (reads from STDIN, outputs IR to STDOUT, builtin.c to STDERR)"
 	@echo "  clean  - Clean build artifacts"
 	@echo "  help   - Show this help message"
+	@echo ""
+	@echo "Environment Variables:"
+	@echo "  JAVA   - Java executable path (default: java). Use for JDK 21+ if not in PATH"
+	@echo "           Example: JAVA=/path/to/jdk21/bin/java make run"
