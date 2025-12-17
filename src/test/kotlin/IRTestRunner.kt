@@ -23,7 +23,7 @@ import llvm.Module
 import llvm.IRBuilder
 
 // Constants
-private const val TEST_DATA_REPO_URL = "https://github.com/peterzheng98/RCompiler-Testcases.git"
+private const val TEST_DATA_REPO_URL = "git@github.com:peterzheng98/RCompiler-Testcases.git"
 private const val TEST_DATA_REPO_NAME = "RCompiler-Testcases"
 
 // WSL-related utilities
