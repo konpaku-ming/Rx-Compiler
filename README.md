@@ -151,15 +151,20 @@ Rx-Compiler/
 
 ## 测试
 
-项目包含大量测试用例，位于 `tests/` 目录下：
+项目包含大量测试用例，位于 `tests/` 和 `IR-1/` 目录下：
 
-- `tests/pass/` - 应当编译成功的测试用例
+- `tests/pass/` - 应当编译成功的测试用例（语义检查阶段）
 - `tests/fail/` - 应当编译失败的测试用例（用于验证错误检测）
+- `IR-1/` - 端到端测试用例，包含输入输出文件
 
-### 运行测试
+### 批量测试
+
+#### 1. 语义阶段测试 (tests 目录)
+
+对 `tests/` 目录中的文件运行到语义分析阶段，验证编译器能否正确接受或拒绝源代码。
 
 ```bash
-# 运行所有测试
+# 运行所有语义测试
 ./gradlew runTestRunner
 
 # 静默模式运行
@@ -171,6 +176,23 @@ Rx-Compiler/
 # 显示源代码预览
 ./gradlew runTestRunner -PtrArgs="--show-source"
 ```
+
+#### 2. LLVM IR 端到端测试 (IR-1 目录)
+
+对 `IR-1/` 目录中的文件完整编译到 LLVM IR，与 `builtin.c` 一起使用 clang 编译，运行并比较标准输出。
+
+```bash
+# 运行所有 IR 测试
+./gradlew runIRTestRunner
+
+# 静默模式运行（仅显示摘要）
+./gradlew runIRTestRunner -PirArgs="--quiet"
+
+# 遇到第一个失败时停止
+./gradlew runIRTestRunner -PirArgs="--fail-fast"
+```
+
+**注意**: IR 测试需要系统安装 clang（推荐 clang-15 或更高版本）。
 
 ## 编译器架构
 
