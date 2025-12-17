@@ -250,7 +250,10 @@ private fun runIRTest(
 
         // Step 4: Compare output
         val expectedOutput = Files.readString(expectedOutputFile)
-        if (actualOutput.trim() == expectedOutput.trim()) {
+        // Normalize line endings for cross-platform compatibility (Windows/WSL/Unix)
+        val normalizedActual = normalizeLineEndings(actualOutput)
+        val normalizedExpected = normalizeLineEndings(expectedOutput)
+        if (normalizedActual == normalizedExpected) {
             return IRTestResult(testName, true)
         } else {
             return IRTestResult(testName, false, "Output mismatch")
@@ -396,6 +399,11 @@ private fun runProgram(executable: Path, inputFile: Path, useWSL: Boolean): Stri
     } catch (e: Exception) {
         null
     }
+}
+
+private fun normalizeLineEndings(text: String): String {
+    // Normalize all line ending styles (CRLF, CR, LF) to LF
+    return text.replace(Regex("\\r\\n?"), "\n").trim()
 }
 
 private fun printSummary(stats: IRTestStats, failures: List<IRTestResult>) {
