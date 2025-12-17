@@ -445,8 +445,9 @@ private fun fetchTestData(projectRoot: Path, ir1Dir: Path): Boolean {
         val cloneDir = tempDir.resolve("RCompiler-Testcases")
         
         // Step 1: Initialize sparse checkout
+        // Note: The clone directory will be relative to tempDir (the working directory)
         val initResult = runGitCommand(
-            listOf("git", "clone", "--depth", "1", "--filter=blob:none", "--sparse", repoUrl, cloneDir.toString()),
+            listOf("git", "clone", "--depth", "1", "--filter=blob:none", "--sparse", repoUrl, "RCompiler-Testcases"),
             tempDir
         )
         if (!initResult) {
@@ -520,7 +521,15 @@ private fun fetchTestData(projectRoot: Path, ir1Dir: Path): Boolean {
 
 private fun runGitCommand(command: List<String>, workingDir: Path): Boolean {
     return try {
-        val process = ProcessBuilder(command)
+        // On Windows, use WSL's git
+        val actualCommand = if (isWindows()) {
+            // Prepend "wsl" to the command list
+            listOf("wsl") + command
+        } else {
+            command
+        }
+        
+        val process = ProcessBuilder(actualCommand)
             .directory(workingDir.toFile())
             .redirectOutput(ProcessBuilder.Redirect.PIPE)
             .redirectError(ProcessBuilder.Redirect.PIPE)
@@ -529,7 +538,7 @@ private fun runGitCommand(command: List<String>, workingDir: Path): Boolean {
         val exitCode = process.waitFor()
         if (exitCode != 0) {
             val errorOutput = process.errorStream.bufferedReader().readText()
-            println("Git command failed: ${command.joinToString(" ")}")
+            println("Git command failed: ${actualCommand.joinToString(" ")}")
             println("Error: $errorOutput")
             false
         } else {
