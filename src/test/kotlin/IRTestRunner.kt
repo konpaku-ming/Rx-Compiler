@@ -70,6 +70,8 @@ fun main(args: Array<String>) {
         
         if (gitConfig.useWSL) {
             println("Using git from WSL: ${gitConfig.command}")
+        } else {
+            println("Using native git: ${gitConfig.command}")
         }
         
         val fetchResult = fetchTestData(projectRoot, ir1Dir, gitConfig)
@@ -514,7 +516,8 @@ private fun fetchTestData(projectRoot: Path, ir1Dir: Path, gitConfig: GitConfig)
         val cloneDir = tempDir.resolve(TEST_DATA_REPO_NAME)
         
         // Step 1: Initialize sparse checkout
-        // Note: The clone directory will be relative to tempDir (the working directory)
+        // Note: The clone command uses TEST_DATA_REPO_NAME as a relative path, which creates
+        // a subdirectory within tempDir (the working directory)
         val initResult = runGitCommand(
             listOf("git", "clone", "--depth", "1", "--filter=blob:none", "--sparse", TEST_DATA_REPO_URL, TEST_DATA_REPO_NAME),
             tempDir,
