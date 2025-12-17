@@ -19,20 +19,29 @@ import llvm.IRBuilder
 
 fun main(args: Array<String>) {
     val sourceCode: String
+    var semanticOnly = false
+
+    // Parse arguments
+    val fileArgs = args.filter { !it.startsWith("--") }
+    val flags = args.filter { it.startsWith("--") }
+    
+    if (flags.contains("--semantic-only")) {
+        semanticOnly = true
+    }
 
     // Support reading from STDIN when no args or "-" is passed
-    if (args.isEmpty() || args[0] == "-") {
+    if (fileArgs.isEmpty() || fileArgs[0] == "-") {
         try {
             sourceCode = System.`in`.bufferedReader().use { it.readText() }
         } catch (e: Exception) {
             System.err.println("error: cannot read from stdin: ${e.message}")
             exitProcess(1)
         }
-    } else if (args.size != 1) {
+    } else if (fileArgs.size != 1) {
         System.err.println("expected source code file or '-' for stdin")
         exitProcess(1)
     } else {
-        val filePath = args[0]
+        val filePath = fileArgs[0]
         try {
             val file = File(filePath)
             sourceCode = file.readText(Charsets.UTF_8)
@@ -61,6 +70,13 @@ fun main(args: Array<String>) {
         fourthVisitor.visitCrate(node = ast) // 第四次pass
         val fifthVisitor = FifthVisitor(semanticScopeTree)
         fifthVisitor.visitCrate(node = ast) // 第五次pass
+
+        // If semantic-only mode, exit successfully after semantic check
+        if (semanticOnly) {
+            println("Semantic check passed")
+            exitProcess(0)
+        }
+
         val intTypeConfirmer = IntegerConfirmer(semanticScopeTree)
         intTypeConfirmer.visitCrate(node = ast) // 确认整数类型
 
@@ -77,7 +93,7 @@ fun main(args: Array<String>) {
             val irContent = module.print()
 
             // If reading from STDIN (no args or "-"), output to STDOUT
-            if (args.isEmpty() || args[0] == "-") {
+            if (fileArgs.isEmpty() || fileArgs[0] == "-") {
                 print(irContent)
             } else {
                 // Otherwise write to file as before

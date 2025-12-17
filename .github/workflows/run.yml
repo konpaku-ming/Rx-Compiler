@@ -50,25 +50,79 @@ jobs:
       - name: Build the compiler with Gradle
         run: ./gradlew installDist
 
-      # 步骤 6: 运行编译器测试
-      # 使用构建好的脚本来执行
-      - name: Run compiler tests
+      # 步骤 6: 运行语义检查测试 (tests 目录)
+      # 对 tests/pass 和 tests/fail 中的所有文件进行语义检查
+      - name: Run semantic check tests
         run: |
           COMPILER_SCRIPT="./build/install/Rx-Compiler/bin/Rx-Compiler"
+          PASS_COUNT=0
+          FAIL_COUNT=0
+          ERROR_COUNT=0
 
-          echo "--- Testing 'pass' cases ---"
+          echo "=== Testing semantic check on tests/pass/ cases ==="
           for file in tests/pass/*.rx; do
-            echo "Testing (should pass): $file"
-            "$COMPILER_SCRIPT" "$file"
-          done
-
-          echo "--- Testing 'fail' cases ---"
-          for file in tests/fail/*.rx; do
-            echo "Testing (should fail): $file"
-            if ! "$COMPILER_SCRIPT" "$file"; then
-              echo "Compiler correctly failed for $file."
+            echo "Testing (should pass semantic check): $file"
+            if "$COMPILER_SCRIPT" --semantic-only "$file" > /dev/null 2>&1; then
+              echo "✓ Passed: $file"
+              PASS_COUNT=$((PASS_COUNT + 1))
             else
-              echo "ERROR: Compiler was expected to fail for $file, but it succeeded."
-              exit 1
+              echo "✗ ERROR: Semantic check failed for $file (expected to pass)"
+              ERROR_COUNT=$((ERROR_COUNT + 1))
             fi
           done
+
+          echo ""
+          echo "=== Testing semantic check on tests/fail/ cases ==="
+          for file in tests/fail/*.rx; do
+            echo "Testing (should fail semantic check): $file"
+            if ! "$COMPILER_SCRIPT" --semantic-only "$file" > /dev/null 2>&1; then
+              echo "✓ Correctly failed: $file"
+              FAIL_COUNT=$((FAIL_COUNT + 1))
+            else
+              echo "✗ ERROR: Semantic check passed for $file (expected to fail)"
+              ERROR_COUNT=$((ERROR_COUNT + 1))
+            fi
+          done
+
+          echo ""
+          echo "=== Semantic Check Test Summary ==="
+          echo "Pass tests passed: $PASS_COUNT"
+          echo "Fail tests failed correctly: $FAIL_COUNT"
+          echo "Errors: $ERROR_COUNT"
+          
+          if [ $ERROR_COUNT -gt 0 ]; then
+            echo "Some tests did not behave as expected!"
+            exit 1
+          fi
+
+      # 步骤 7: 运行 IR 生成测试 (IR-1 目录)
+      # 对 IR-1 中的所有文件生成 IR，但不编译运行
+      - name: Run IR generation tests
+        run: |
+          COMPILER_SCRIPT="./build/install/Rx-Compiler/bin/Rx-Compiler"
+          SUCCESS_COUNT=0
+          ERROR_COUNT=0
+
+          echo "=== Testing IR generation on IR-1/ cases ==="
+          for file in IR-1/*.rx; do
+            echo "Testing IR generation: $file"
+            if "$COMPILER_SCRIPT" "$file" > /dev/null 2>&1; then
+              echo "✓ IR generated successfully: $file"
+              SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+              # Clean up generated IR file
+              rm -f main.ll
+            else
+              echo "✗ ERROR: IR generation failed for $file"
+              ERROR_COUNT=$((ERROR_COUNT + 1))
+            fi
+          done
+
+          echo ""
+          echo "=== IR Generation Test Summary ==="
+          echo "Successful IR generations: $SUCCESS_COUNT"
+          echo "Errors: $ERROR_COUNT"
+          
+          if [ $ERROR_COUNT -gt 0 ]; then
+            echo "Some IR generation tests failed!"
+            exit 1
+          fi
