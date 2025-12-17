@@ -48,3 +48,25 @@ tasks.register<JavaExec>("runTestRunner") {
     // Accept args via -PtrArgs property (split on whitespace)
     args = project.findProperty("trArgs")?.toString()?.split("\\s+".toRegex()) ?: listOf()
 }
+
+// Add a convenience task to run the IRTestRunner (located in src/test/kotlin).
+// Usage:
+//   ./gradlew runIRTestRunner
+//   ./gradlew runIRTestRunner -PirArgs="--quiet"
+//   ./gradlew runIRTestRunner -PirArgs="--fail-fast"
+tasks.register<JavaExec>("runIRTestRunner") {
+    group = "verification"
+    description = "Run the IRTestRunner (IR-1 end-to-end tests). Pass args via -PirArgs=\"...\" (e.g. --quiet)."
+
+    // Ensure test classes are compiled before running
+    dependsOn("testClasses")
+
+    // IRTestRunner.kt defines a top-level `main`, compiled into IRTestRunnerKt
+    mainClass.set("IRTestRunnerKt")
+
+    // Include both main and test runtime classpaths
+    classpath = sourceSets["test"].runtimeClasspath + sourceSets["main"].runtimeClasspath
+
+    // Accept args via -PirArgs property (split on whitespace)
+    args = project.findProperty("irArgs")?.toString()?.split("\\s+".toRegex()) ?: listOf()
+}
