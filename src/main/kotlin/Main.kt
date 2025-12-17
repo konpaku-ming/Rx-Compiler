@@ -90,6 +90,7 @@ fun main(args: Array<String>) {
                 }
             }
         } catch (_: CompilerException) {
+            // 能通过 Semantic 测试，但用到了 IR Generator 还未支持的特性
             exitProcess(0)
         }
     } catch (e: CompilerException) {
