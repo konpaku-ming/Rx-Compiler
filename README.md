@@ -143,7 +143,11 @@ Rx-Compiler/
 │   ├── pass/                  # 应通过的测试
 │   └── fail/                  # 应失败的测试
 ├── docs/                      # 文档
-│   └── LLVM_IR_Generation_Guide.md  # IR 生成指南
+│   ├── Borrow_Deref_IR_Generation.md            # 借用和解引用的 IR 生成
+│   ├── FunctionItem_ReturnExpr_Implementation_Plan.md # 函数和返回表达式实现计划
+│   ├── Loop_BreakContinue_Implementation_Plan.md      # 循环和 break/continue 实现计划
+│   ├── Signed_vs_Unsigned_Instructions.md             # 有符号与无符号指令
+│   └── Testing_Guide.md                               # 测试指南
 ├── build.gradle.kts           # Gradle 构建配置
 ├── settings.gradle.kts        # Gradle 设置
 ├── gradlew                    # Unix Gradle Wrapper
@@ -239,7 +243,11 @@ Rx 语言提供以下内置函数：
 
 更多技术文档请参阅 `docs/` 目录：
 
-- [LLVM IR 生成指南](docs/LLVM_IR_Generation_Guide.md) - 详细的 IR 生成文档（其中部分实现方式与实际不同）
+- [借用和解引用的 IR 生成](docs/Borrow_Deref_IR_Generation.md) - 借用和解引用相关的 IR 生成实现
+- [函数和返回表达式实现计划](docs/FunctionItem_ReturnExpr_Implementation_Plan.md) - 函数项和返回表达式的实现设计
+- [循环和 break/continue 实现计划](docs/Loop_BreakContinue_Implementation_Plan.md) - 循环控制流的实现设计
+- [有符号与无符号指令](docs/Signed_vs_Unsigned_Instructions.md) - 有符号和无符号整数的 LLVM 指令选择
+- [测试指南](docs/Testing_Guide.md) - 测试系统使用指南
 
 ## 许可证
 
