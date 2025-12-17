@@ -46,7 +46,7 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
-      # 步骤 5: 运行语义检查测试
-      # 使用 TestRunner 对 tests/ 目录中所有测试用例进行语义检查
+      # Step 5: Run semantic check tests
+      # Use TestRunner to perform semantic checks on all test cases in tests/ directory
       - name: Run semantic check tests
         run: ./gradlew runTestRunner
