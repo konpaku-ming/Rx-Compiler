@@ -22,8 +22,7 @@ fun main(args: Array<String>) {
     var semanticOnly = false
 
     // Parse arguments
-    val fileArgs = args.filter { !it.startsWith("--") }
-    val flags = args.filter { it.startsWith("--") }
+    val (flags, fileArgs) = args.partition { it.startsWith("--") }
     
     if (flags.contains("--semantic-only")) {
         semanticOnly = true

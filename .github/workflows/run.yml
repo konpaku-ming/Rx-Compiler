@@ -55,6 +55,7 @@ jobs:
       - name: Run semantic check tests
         run: |
           COMPILER_SCRIPT="./build/install/Rx-Compiler/bin/Rx-Compiler"
+          SILENT_REDIRECT=">/dev/null 2>&1"
           PASS_COUNT=0
           FAIL_COUNT=0
           ERROR_COUNT=0
@@ -62,7 +63,7 @@ jobs:
           echo "=== Testing semantic check on tests/pass/ cases ==="
           for file in tests/pass/*.rx; do
             echo "Testing (should pass semantic check): $file"
-            if "$COMPILER_SCRIPT" --semantic-only "$file" > /dev/null 2>&1; then
+            if "$COMPILER_SCRIPT" --semantic-only "$file" >/dev/null 2>&1; then
               echo "✓ Passed: $file"
               PASS_COUNT=$((PASS_COUNT + 1))
             else
@@ -75,7 +76,7 @@ jobs:
           echo "=== Testing semantic check on tests/fail/ cases ==="
           for file in tests/fail/*.rx; do
             echo "Testing (should fail semantic check): $file"
-            if ! "$COMPILER_SCRIPT" --semantic-only "$file" > /dev/null 2>&1; then
+            if ! "$COMPILER_SCRIPT" --semantic-only "$file" >/dev/null 2>&1; then
               echo "✓ Correctly failed: $file"
               FAIL_COUNT=$((FAIL_COUNT + 1))
             else
@@ -106,11 +107,11 @@ jobs:
           echo "=== Testing IR generation on IR-1/ cases ==="
           for file in IR-1/*.rx; do
             echo "Testing IR generation: $file"
-            if "$COMPILER_SCRIPT" "$file" > /dev/null 2>&1; then
+            if "$COMPILER_SCRIPT" "$file" >/dev/null 2>&1; then
               echo "✓ IR generated successfully: $file"
               SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
-              # Clean up generated IR file
-              rm -f main.ll
+              # Clean up generated IR file (matches output file name from Main.kt)
+              rm -f main.ll builtin.c
             else
               echo "✗ ERROR: IR generation failed for $file"
               ERROR_COUNT=$((ERROR_COUNT + 1))
