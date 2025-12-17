@@ -250,7 +250,10 @@ private fun runIRTest(
 
         // Step 4: Compare output
         val expectedOutput = Files.readString(expectedOutputFile)
-        if (actualOutput.trim() == expectedOutput.trim()) {
+        // Normalize line endings for cross-platform compatibility (Windows/WSL/Unix)
+        val normalizedActual = actualOutput.replace("\r\n", "\n").replace("\r", "\n").trim()
+        val normalizedExpected = expectedOutput.replace("\r\n", "\n").replace("\r", "\n").trim()
+        if (normalizedActual == normalizedExpected) {
             return IRTestResult(testName, true)
         } else {
             return IRTestResult(testName, false, "Output mismatch")
