@@ -48,6 +48,8 @@ bin/
 main.ll
 main_test
 main_test_asan
+actual_output.txt
+test_prog
 
 # IntelliJ/IDEA project files
 .idea/
