@@ -69,6 +69,10 @@ All cases behaved as expected.
 
 - 必须安装 clang（推荐 clang-15 或更高版本）
 - 测试会自动查找 `clang-15` 或 `clang` 命令
+- **Windows 用户**: 如果 clang 安装在 WSL/Ubuntu 中，测试工具会自动检测并使用 WSL 执行编译和运行
+  - 确保已安装 WSL (Windows Subsystem for Linux)
+  - 在 WSL 中安装 clang: `sudo apt install clang-15`
+  - 从 Windows 运行测试时，工具会自动将路径转换为 WSL 格式并通过 `wsl` 命令执行
 
 ### 运行方式
 
