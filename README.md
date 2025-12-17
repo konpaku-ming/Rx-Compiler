@@ -199,6 +199,7 @@ Rx-Compiler/
 ```
 
 **注意**: 
+- **测试数据自动获取**：首次运行 IRTestRunner 时，测试工具会自动从 [peterzheng98/RCompiler-Testcases](https://github.com/peterzheng98/RCompiler-Testcases) 仓库的 `IR-1/src` 目录获取测试数据，使用 Git Sparse Checkout 仅下载必要的文件。
 - IR 测试需要系统安装 clang（推荐 clang-15 或更高版本）。
 - Windows 用户可以在 WSL 中安装 clang，测试工具会自动检测并使用。
 

@@ -55,20 +55,24 @@ All cases behaved as expected.
 ### 测试内容
 
 - 位置：`IR-1/` 目录
+- 测试数据来源：[peterzheng98/RCompiler-Testcases](https://github.com/peterzheng98/RCompiler-Testcases) 仓库的 `IR-1/src` 目录
+- **自动获取测试数据**：首次运行 IRTestRunner 时，如果 `IR-1/` 目录不存在或为空，测试工具会自动使用 Git Sparse Checkout 从外部仓库获取测试数据
 - 测试文件组：每个测试包含三个文件
   - `testname.rx` - Rx 源代码
   - `testname.in` - 标准输入
   - `testname.out` - 期望的标准输出
 - 测试流程：
-  1. 编译 `.rx` 文件生成 LLVM IR
-  2. 使用 clang 将 IR 与 `builtin.c` 编译为可执行文件
-  3. 运行可执行文件，提供 `.in` 文件作为输入
-  4. 比较实际输出与 `.out` 文件内容
+  1. 自动获取测试数据（如果需要）
+  2. 编译 `.rx` 文件生成 LLVM IR
+  3. 使用 clang 将 IR 与 `builtin.c` 编译为可执行文件
+  4. 运行可执行文件，提供 `.in` 文件作为输入
+  5. 比较实际输出与 `.out` 文件内容
 
 ### 环境要求
 
 - 必须安装 clang（推荐 clang-15 或更高版本）
 - 测试会自动查找 `clang-15` 或 `clang` 命令
+- **首次运行需要互联网连接**以获取测试数据（之后会使用缓存的数据）
 - **Windows 用户**: 如果 clang 安装在 WSL/Ubuntu 中，测试工具会自动检测并使用 WSL 执行编译和运行
   - 确保已安装 WSL (Windows Subsystem for Linux)
   - 在 WSL 中安装 clang: `sudo apt install clang-15`
@@ -141,11 +145,16 @@ All tests passed!
 
 ### 添加 IR 测试
 
-1. 在 `IR-1/` 目录添加三个文件：
-   - `testname.rx` - 源代码
-   - `testname.in` - 输入数据
-   - `testname.out` - 期望输出
-2. 运行测试验证
+**注意**：`IR-1/` 目录中的测试数据是自动从外部仓库获取的，不应直接修改本地的 `IR-1/` 目录。
+
+如需添加新的 IR 测试：
+1. 向 [peterzheng98/RCompiler-Testcases](https://github.com/peterzheng98/RCompiler-Testcases) 仓库提交 PR，在 `IR-1/src/` 目录下添加新测试：
+   - 创建 `testname/` 子目录
+   - 在其中添加三个文件：
+     - `testname.rx` - 源代码
+     - `testname.in` - 输入数据
+     - `testname.out` - 期望输出
+2. PR 合并后，删除本地的 `IR-1/` 目录，重新运行测试工具会自动获取更新后的测试数据
 
 ## 持续集成
 
