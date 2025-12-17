@@ -22,8 +22,17 @@ import llvm.LLVMContext
 import llvm.Module
 import llvm.IRBuilder
 
+// Constants
+private const val TEST_DATA_REPO_URL = "https://github.com/peterzheng98/RCompiler-Testcases.git"
+private const val TEST_DATA_REPO_NAME = "RCompiler-Testcases"
+
 // WSL-related utilities
 data class ClangConfig(
+    val command: String,
+    val useWSL: Boolean = false
+)
+
+data class GitConfig(
     val command: String,
     val useWSL: Boolean = false
 )
@@ -51,7 +60,21 @@ fun main(args: Array<String>) {
     // Automatically fetch test data if IR-1 directory doesn't exist or is empty
     if (!Files.isDirectory(ir1Dir) || isDirectoryEmpty(ir1Dir)) {
         println("Fetching test data from external repository...")
-        val fetchResult = fetchTestData(projectRoot, ir1Dir)
+        
+        // Check for git availability
+        val gitConfig = findGit()
+        if (gitConfig == null) {
+            println("Error: git not found. Please install git.")
+            exitProcess(1)
+        }
+        
+        if (gitConfig.useWSL) {
+            println("Using git from WSL: ${gitConfig.command}")
+        } else {
+            println("Using native git: ${gitConfig.command}")
+        }
+        
+        val fetchResult = fetchTestData(projectRoot, ir1Dir, gitConfig)
         if (!fetchResult) {
             println("Failed to fetch test data. Please check your internet connection.")
             exitProcess(1)
@@ -169,6 +192,55 @@ private fun findClang(): ClangConfig? {
             } catch (e: Exception) {
                 // Continue to next command
             }
+        }
+    }
+    
+    return null
+}
+
+private fun findGit(): GitConfig? {
+    // On Windows, we prefer WSL git
+    if (isWindows()) {
+        // Try WSL git first
+        try {
+            val process = ProcessBuilder("wsl", "which", "git")
+                .redirectOutput(ProcessBuilder.Redirect.PIPE)
+                .redirectError(ProcessBuilder.Redirect.PIPE)
+                .start()
+            process.waitFor()
+            if (process.exitValue() == 0) {
+                return GitConfig("git", useWSL = true)
+            }
+        } catch (e: Exception) {
+            // WSL not available, try Windows git
+        }
+        
+        // Try native Windows git (check if the command exists by running it with --version)
+        try {
+            val process = ProcessBuilder("git", "--version")
+                .redirectOutput(ProcessBuilder.Redirect.PIPE)
+                .redirectError(ProcessBuilder.Redirect.PIPE)
+                .start()
+            process.waitFor()
+            if (process.exitValue() == 0) {
+                return GitConfig("git", useWSL = false)
+            }
+        } catch (e: Exception) {
+            // Git not found
+        }
+    } else {
+        // On Unix-like systems, use 'which' to find git
+        try {
+            val process = ProcessBuilder("which", "git")
+                .redirectOutput(ProcessBuilder.Redirect.PIPE)
+                .redirectError(ProcessBuilder.Redirect.PIPE)
+                .start()
+            process.waitFor()
+            if (process.exitValue() == 0) {
+                return GitConfig("git", useWSL = false)
+            }
+        } catch (e: Exception) {
+            // Git not found
         }
     }
     
@@ -437,17 +509,19 @@ private fun isDirectoryEmpty(directory: Path): Boolean {
     }
 }
 
-private fun fetchTestData(projectRoot: Path, ir1Dir: Path): Boolean {
+private fun fetchTestData(projectRoot: Path, ir1Dir: Path, gitConfig: GitConfig): Boolean {
     val tempDir = Files.createTempDirectory("ir_testdata_fetch")
     try {
         // Use git sparse-checkout to fetch only IR-1/src from the external repository
-        val repoUrl = "https://github.com/peterzheng98/RCompiler-Testcases.git"
-        val cloneDir = tempDir.resolve("RCompiler-Testcases")
+        val cloneDir = tempDir.resolve(TEST_DATA_REPO_NAME)
         
         // Step 1: Initialize sparse checkout
+        // Note: The clone command uses TEST_DATA_REPO_NAME as a relative path, which creates
+        // a subdirectory within tempDir (the working directory)
         val initResult = runGitCommand(
-            listOf("git", "clone", "--depth", "1", "--filter=blob:none", "--sparse", repoUrl, cloneDir.toString()),
-            tempDir
+            listOf("git", "clone", "--depth", "1", "--filter=blob:none", "--sparse", TEST_DATA_REPO_URL, TEST_DATA_REPO_NAME),
+            tempDir,
+            gitConfig
         )
         if (!initResult) {
             return false
@@ -456,7 +530,8 @@ private fun fetchTestData(projectRoot: Path, ir1Dir: Path): Boolean {
         // Step 2: Configure sparse-checkout
         val sparseCheckoutResult = runGitCommand(
             listOf("git", "sparse-checkout", "init", "--cone"),
-            cloneDir
+            cloneDir,
+            gitConfig
         )
         if (!sparseCheckoutResult) {
             return false
@@ -465,7 +540,8 @@ private fun fetchTestData(projectRoot: Path, ir1Dir: Path): Boolean {
         // Step 3: Set sparse-checkout to IR-1/src
         val setPathResult = runGitCommand(
             listOf("git", "sparse-checkout", "set", "IR-1/src"),
-            cloneDir
+            cloneDir,
+            gitConfig
         )
         if (!setPathResult) {
             return false
@@ -518,9 +594,17 @@ private fun fetchTestData(projectRoot: Path, ir1Dir: Path): Boolean {
     }
 }
 
-private fun runGitCommand(command: List<String>, workingDir: Path): Boolean {
+private fun runGitCommand(command: List<String>, workingDir: Path, gitConfig: GitConfig): Boolean {
     return try {
-        val process = ProcessBuilder(command)
+        // Use WSL's git if configured to do so
+        val actualCommand = if (gitConfig.useWSL) {
+            // Prepend "wsl" to the command list
+            listOf("wsl") + command
+        } else {
+            command
+        }
+        
+        val process = ProcessBuilder(actualCommand)
             .directory(workingDir.toFile())
             .redirectOutput(ProcessBuilder.Redirect.PIPE)
             .redirectError(ProcessBuilder.Redirect.PIPE)
@@ -529,7 +613,7 @@ private fun runGitCommand(command: List<String>, workingDir: Path): Boolean {
         val exitCode = process.waitFor()
         if (exitCode != 0) {
             val errorOutput = process.errorStream.bufferedReader().readText()
-            println("Git command failed: ${command.joinToString(" ")}")
+            println("Git command failed: ${actualCommand.joinToString(" ")}")
             println("Error: $errorOutput")
             false
         } else {
