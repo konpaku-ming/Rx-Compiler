@@ -22,6 +22,10 @@ import llvm.LLVMContext
 import llvm.Module
 import llvm.IRBuilder
 
+// Constants
+private const val TEST_DATA_REPO_URL = "https://github.com/peterzheng98/RCompiler-Testcases.git"
+private const val TEST_DATA_REPO_NAME = "RCompiler-Testcases"
+
 // WSL-related utilities
 data class ClangConfig(
     val command: String,
@@ -507,13 +511,12 @@ private fun fetchTestData(projectRoot: Path, ir1Dir: Path, gitConfig: GitConfig)
     val tempDir = Files.createTempDirectory("ir_testdata_fetch")
     try {
         // Use git sparse-checkout to fetch only IR-1/src from the external repository
-        val repoUrl = "https://github.com/peterzheng98/RCompiler-Testcases.git"
-        val cloneDir = tempDir.resolve("RCompiler-Testcases")
+        val cloneDir = tempDir.resolve(TEST_DATA_REPO_NAME)
         
         // Step 1: Initialize sparse checkout
         // Note: The clone directory will be relative to tempDir (the working directory)
         val initResult = runGitCommand(
-            listOf("git", "clone", "--depth", "1", "--filter=blob:none", "--sparse", repoUrl, "RCompiler-Testcases"),
+            listOf("git", "clone", "--depth", "1", "--filter=blob:none", "--sparse", TEST_DATA_REPO_URL, TEST_DATA_REPO_NAME),
             tempDir,
             gitConfig
         )
