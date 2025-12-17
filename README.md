@@ -71,6 +71,8 @@ fn main() {
 - **JDK 21** 或更高版本
 - **Gradle** (项目包含 Gradle Wrapper，无需单独安装)
 - **LLVM** (如需执行生成的 IR，需安装 LLVM 工具链)
+  - Linux/macOS: 直接安装 clang
+  - Windows: 可以安装 clang 或在 WSL 中安装（测试工具支持自动检测和使用 WSL 中的 clang）
 
 ## 构建
 
@@ -192,7 +194,9 @@ Rx-Compiler/
 ./gradlew runIRTestRunner -PirArgs="--fail-fast"
 ```
 
-**注意**: IR 测试需要系统安装 clang（推荐 clang-15 或更高版本）。
+**注意**: 
+- IR 测试需要系统安装 clang（推荐 clang-15 或更高版本）。
+- Windows 用户可以在 WSL 中安装 clang，测试工具会自动检测并使用。
 
 ## 编译器架构
 
