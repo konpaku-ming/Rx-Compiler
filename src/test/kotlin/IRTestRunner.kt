@@ -562,19 +562,21 @@ private fun fetchTestData(projectRoot: Path, ir1Dir: Path, gitConfig: GitConfig)
         // Copy files from subdirectories to flat structure
         // External structure: IR-1/src/<testname>/<testname>.{rx,in,out}
         // Target structure: IR-1/<testname>.{rx,in,out}
+        // Only process directories starting with "comprehensive"
         Files.list(srcDir).use { testDirs ->
-            testDirs.filter { Files.isDirectory(it) }.forEach { testDir ->
-                val testName = testDir.fileName.toString()
-                
-                // Copy .rx, .in, and .out files
-                for (ext in listOf(".rx", ".in", ".out")) {
-                    val sourceFile = testDir.resolve("$testName$ext")
-                    if (Files.exists(sourceFile)) {
-                        val targetFile = ir1Dir.resolve("$testName$ext")
-                        Files.copy(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING)
+            testDirs.filter { Files.isDirectory(it) && it.fileName.toString().startsWith("comprehensive") }
+                .forEach { testDir ->
+                    val testName = testDir.fileName.toString()
+                    
+                    // Copy .rx, .in, and .out files
+                    for (ext in listOf(".rx", ".in", ".out")) {
+                        val sourceFile = testDir.resolve("$testName$ext")
+                        if (Files.exists(sourceFile)) {
+                            val targetFile = ir1Dir.resolve("$testName$ext")
+                            Files.copy(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING)
+                        }
                     }
                 }
-            }
         }
         
         return true
