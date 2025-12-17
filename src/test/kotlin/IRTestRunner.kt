@@ -112,25 +112,11 @@ fun main(args: Array<String>) {
 }
 
 private fun findClang(): ClangConfig? {
-    // First try native commands (clang-15, clang)
     val commands = listOf("clang-15", "clang")
-    for (cmd in commands) {
-        try {
-            val process = ProcessBuilder("which", cmd)
-                .redirectOutput(ProcessBuilder.Redirect.PIPE)
-                .redirectError(ProcessBuilder.Redirect.PIPE)
-                .start()
-            process.waitFor()
-            if (process.exitValue() == 0) {
-                return ClangConfig(cmd, useWSL = false)
-            }
-        } catch (e: Exception) {
-            // Continue to next command
-        }
-    }
     
-    // If native commands failed, try WSL on Windows
+    // On Windows, we can't use 'which', so we try WSL first
     if (isWindows()) {
+        // Try WSL clang
         for (cmd in commands) {
             try {
                 val process = ProcessBuilder("wsl", "which", cmd)
@@ -140,6 +126,38 @@ private fun findClang(): ClangConfig? {
                 process.waitFor()
                 if (process.exitValue() == 0) {
                     return ClangConfig(cmd, useWSL = true)
+                }
+            } catch (e: Exception) {
+                // Continue to next command
+            }
+        }
+        
+        // Try native Windows clang (check if the command exists by running it with --version)
+        for (cmd in commands) {
+            try {
+                val process = ProcessBuilder(cmd, "--version")
+                    .redirectOutput(ProcessBuilder.Redirect.PIPE)
+                    .redirectError(ProcessBuilder.Redirect.PIPE)
+                    .start()
+                process.waitFor()
+                if (process.exitValue() == 0) {
+                    return ClangConfig(cmd, useWSL = false)
+                }
+            } catch (e: Exception) {
+                // Continue to next command
+            }
+        }
+    } else {
+        // On Unix-like systems, use 'which' to find clang
+        for (cmd in commands) {
+            try {
+                val process = ProcessBuilder("which", cmd)
+                    .redirectOutput(ProcessBuilder.Redirect.PIPE)
+                    .redirectError(ProcessBuilder.Redirect.PIPE)
+                    .start()
+                process.waitFor()
+                if (process.exitValue() == 0) {
+                    return ClangConfig(cmd, useWSL = false)
                 }
             } catch (e: Exception) {
                 // Continue to next command
@@ -157,18 +175,34 @@ private fun isWindows(): Boolean {
 
 private fun windowsPathToWSL(windowsPath: String): String {
     // Convert Windows path like "C:\Users\..." to WSL path "/mnt/c/Users/..."
+    
+    // UNC paths (\\server\share) are not well supported in WSL, return as-is
+    if (windowsPath.startsWith("\\\\") || windowsPath.startsWith("//")) {
+        return windowsPath
+    }
+    
+    // Normalize backslashes to forward slashes
     val path = windowsPath.replace('\\', '/')
+    
+    // Remove trailing slash if present (except for root paths)
+    val normalizedPath = if (path.length > 3 && path.endsWith('/')) {
+        path.dropLast(1)
+    } else {
+        path
+    }
     
     // Check if it's an absolute Windows path (e.g., C:/ or D:/)
     val driveLetterRegex = Regex("^([A-Za-z]):/(.*)$")
-    val match = driveLetterRegex.matchEntire(path)
+    val match = driveLetterRegex.matchEntire(normalizedPath)
     
     return if (match != null) {
         val driveLetter = match.groupValues[1].lowercase()
         val restOfPath = match.groupValues[2]
         "/mnt/$driveLetter/$restOfPath"
     } else {
-        path
+        // If it's not an absolute path with drive letter, return as-is
+        // This handles relative paths (though they shouldn't occur in our use case)
+        normalizedPath
     }
 }
 
@@ -324,25 +358,40 @@ private fun compileWithClang(
 
 private fun runProgram(executable: Path, inputFile: Path, useWSL: Boolean): String? {
     return try {
-        val commandList = if (useWSL) {
-            // Convert Windows paths to WSL paths and run via WSL
+        if (useWSL) {
+            // When using WSL, we need to:
+            // 1. Convert executable path to WSL format
+            // 2. Use WSL to run the executable
+            // 3. Redirect input from the Windows file (WSL can access Windows files)
             val executableWSL = windowsPathToWSL(executable.toAbsolutePath().toString())
-            listOf("wsl", executableWSL)
-        } else {
-            listOf(executable.toString())
-        }
-        
-        val process = ProcessBuilder(commandList)
-            .redirectInput(inputFile.toFile())
-            .redirectOutput(ProcessBuilder.Redirect.PIPE)
-            .redirectError(ProcessBuilder.Redirect.PIPE)
-            .start()
+            
+            // WSL can read from Windows file paths directly via redirectInput
+            val process = ProcessBuilder("wsl", executableWSL)
+                .redirectInput(inputFile.toFile())
+                .redirectOutput(ProcessBuilder.Redirect.PIPE)
+                .redirectError(ProcessBuilder.Redirect.PIPE)
+                .start()
 
-        val exitCode = process.waitFor()
-        if (exitCode == 0) {
-            process.inputStream.bufferedReader().readText()
+            val exitCode = process.waitFor()
+            if (exitCode == 0) {
+                process.inputStream.bufferedReader().readText()
+            } else {
+                null
+            }
         } else {
-            null
+            // Native execution
+            val process = ProcessBuilder(executable.toString())
+                .redirectInput(inputFile.toFile())
+                .redirectOutput(ProcessBuilder.Redirect.PIPE)
+                .redirectError(ProcessBuilder.Redirect.PIPE)
+                .start()
+
+            val exitCode = process.waitFor()
+            if (exitCode == 0) {
+                process.inputStream.bufferedReader().readText()
+            } else {
+                null
+            }
         }
     } catch (e: Exception) {
         null
