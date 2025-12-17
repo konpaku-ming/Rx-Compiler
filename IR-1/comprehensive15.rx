@@ -27,34 +27,34 @@ Details:
 // String structure for advanced text processing
 struct StringProcessor {
     // Primary text data
-    text: [i32; 5000],
+    text: [i32; 20],
     text_length: i32,
 
     // Pattern matching data
-    patterns: [[i32; 200]; 50],
-    pattern_lengths: [i32; 50],
+    patterns: [[i32; 10]; 5],
+    pattern_lengths: [i32; 5],
     pattern_count: i32,
 
     // Suffix array and related structures
-    suffix_array: [i32; 5000],
-    lcp_array: [i32; 5000],
-    rank_array: [i32; 5000],
+    suffix_array: [i32; 20],
+    lcp_array: [i32; 20],
+    rank_array: [i32; 20],
 
     // KMP preprocessing
-    lps: [i32; 200],
+    lps: [i32; 10],
 
     // Boyer-Moore preprocessing
     bad_char: [i32; 256],
-    good_suffix: [i32; 200],
+    good_suffix: [i32; 10],
 
     // Rabin-Karp hashing
     pattern_hash: [i32; 50],
-    text_hash: [i32; 5000],
+    text_hash: [i32; 20],
     base: i32,
     mod_value: i32,
 
     // Edit distance matrix
-    dp_matrix: [[i32; 500]; 500],
+    dp_matrix: [[i32; 10]; 10],
 
     // Huffman coding structures
     char_frequency: [i32; 256],
@@ -68,8 +68,8 @@ struct StringProcessor {
     unique_chars: i32,
 
     // Search results
-    match_positions: [[i32; 100]; 50],
-    match_counts: [i32; 50],
+    match_positions: [[i32; 20]; 5],
+    match_counts: [i32; 5],
 
     // Performance metrics
     algorithm_times: [i32; 10],
@@ -80,22 +80,22 @@ struct StringProcessor {
 impl StringProcessor {
     fn new() -> StringProcessor {
         StringProcessor {
-            text: [0; 5000],
+            text: [0; 20],
             text_length: 0,
-            patterns: [[0; 200]; 50],
-            pattern_lengths: [0; 50],
+            patterns: [[0; 10]; 5],
+            pattern_lengths: [0; 5],
             pattern_count: 0,
-            suffix_array: [0; 5000],
-            lcp_array: [0; 5000],
-            rank_array: [0; 5000],
-            lps: [0; 200],
+            suffix_array: [0; 20],
+            lcp_array: [0; 20],
+            rank_array: [0; 20],
+            lps: [0; 10],
             bad_char: [0; 256],
-            good_suffix: [0; 200],
+            good_suffix: [0; 10],
             pattern_hash: [0; 50],
-            text_hash: [0; 5000],
+            text_hash: [0; 20],
             base: 256,
             mod_value: 10007,
-            dp_matrix: [[0; 500]; 500],
+            dp_matrix: [[0; 10]; 10],
             char_frequency: [0; 256],
             huffman_codes: [[0; 20]; 256],
             code_lengths: [0; 256],
@@ -103,8 +103,8 @@ impl StringProcessor {
             sentence_count: 0,
             paragraph_count: 0,
             unique_chars: 0,
-            match_positions: [[0; 100]; 50],
-            match_counts: [0; 50],
+            match_positions: [[0; 20]; 5],
+            match_counts: [0; 5],
             algorithm_times: [0; 10],
             comparison_count: 0,
             hash_collisions: 0,
@@ -783,7 +783,7 @@ impl RegexMatcher {
         }
     }
 
-    fn match_text(&mut self, text: &[i32; 5000], text_length: i32) -> bool {
+    fn match_text(&mut self, text: &[i32; 20], text_length: i32) -> bool {
         let mut current_states: [bool; 100] = [false; 100];
         let mut next_states: [bool; 100] = [false; 100];
 

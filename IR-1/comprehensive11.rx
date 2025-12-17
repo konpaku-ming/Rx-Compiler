@@ -133,17 +133,17 @@ fn testBooleanArrayOperations() {
     }
 
     // Perform Boolean operations on the grid
-    performBooleanGridOperations(bool_grid, &mut pattern_count);
+    performBooleanGridOperations(&mut bool_grid, &mut pattern_count);
 
     // Count specific Boolean patterns
-    pattern_count = pattern_count + countBooleanPatterns(bool_grid);
+    pattern_count = pattern_count + countBooleanPatterns(&bool_grid);
 
     printlnInt(pattern_count);
     printlnInt(1104); // End Boolean array test
 }
 
 // Perform various Boolean operations on grid
-fn performBooleanGridOperations(mut grid: [bool; 10000], pattern_count: &mut i32) {
+fn performBooleanGridOperations(mut grid: &mut [bool; 10000], pattern_count: &mut i32) {
     let mut operations: i32 = 0;
     let mut row: i32 = 1;
 
@@ -174,7 +174,7 @@ fn performBooleanGridOperations(mut grid: [bool; 10000], pattern_count: &mut i32
 }
 
 // Count Boolean neighbors in grid
-fn countBooleanNeighbors(grid: [bool; 10000], row: i32, col: i32) -> i32 {
+fn countBooleanNeighbors(grid: &[bool; 10000], row: i32, col: i32) -> i32 {
     let mut count: i32 = 0;
     let mut dr: i32 = -1;
 
@@ -200,7 +200,7 @@ fn countBooleanNeighbors(grid: [bool; 10000], row: i32, col: i32) -> i32 {
 }
 
 // Count specific Boolean patterns in grid
-fn countBooleanPatterns(grid: [bool; 10000]) -> i32 {
+fn countBooleanPatterns(grid: &[bool; 10000]) -> i32 {
     let mut pattern_count: i32 = 0;
     let mut row: i32 = 0;
 
@@ -227,7 +227,7 @@ fn countBooleanPatterns(grid: [bool; 10000]) -> i32 {
 }
 
 // Check for specific 2x2 Boolean pattern
-fn checkBooleanPattern2x2(grid: [bool; 10000], row: i32, col: i32) -> bool {
+fn checkBooleanPattern2x2(grid: &[bool; 10000], row: i32, col: i32) -> bool {
     let tl: bool = grid[(row * 100 + col) as usize];
     let tr: bool = grid[(row * 100 + col + 1) as usize];
     let bl: bool = grid[((row + 1) * 100 + col) as usize];
@@ -238,7 +238,7 @@ fn checkBooleanPattern2x2(grid: [bool; 10000], row: i32, col: i32) -> bool {
 }
 
 // Check for specific 3x3 Boolean pattern
-fn checkBooleanPattern3x3(grid: [bool; 10000], row: i32, col: i32) -> bool {
+fn checkBooleanPattern3x3(grid: &[bool; 10000], row: i32, col: i32) -> bool {
     if (row + 2 >= 100 || col + 2 >= 100) {
         return false;
     }
@@ -413,11 +413,11 @@ fn solveBooleanPuzzles() -> i32 {
 // Solve N-Queens using Boolean representation
 fn solveNQueensBooleanVersion(n: i32) -> i32 {
     let mut board: [bool; 64] = [false; 64]; // 8x8 board
-    return nQueensBacktrack(board, 0, n);
+    return nQueensBacktrack(&mut board, 0, n);
 }
 
 // Backtracking algorithm for N-Queens with Boolean board
-fn nQueensBacktrack(mut board: [bool; 64], row: i32, n: i32) -> i32 {
+fn nQueensBacktrack(mut board: &mut [bool; 64], row: i32, n: i32) -> i32 {
     if (row == n) {
         return 1; // Found a solution
     }
@@ -438,7 +438,7 @@ fn nQueensBacktrack(mut board: [bool; 64], row: i32, n: i32) -> i32 {
 }
 
 // Check if position is safe for queen placement
-fn isSafePosition(board: [bool; 64], row: i32, col: i32, n: i32) -> bool {
+fn isSafePosition(board: &[bool; 64], row: i32, col: i32, n: i32) -> bool {
     let mut i: i32 = 0;
 
     // Check column
@@ -529,19 +529,19 @@ fn testBooleanSearchAndFilter() {
 
     // Create large dataset for Boolean filtering
     let mut data: [i32; 5000] = [0; 5000];
-    initializeSearchData(data);
+    initializeSearchData(&mut data);
 
     // Perform Boolean-based filtering operations
-    search_results = search_results + performBooleanFilter(data);
-    search_results = search_results + performMultiCriteriaSearch(data);
-    search_results = search_results + performBooleanRangeSearch(data);
+    search_results = search_results + performBooleanFilter(&data);
+    search_results = search_results + performMultiCriteriaSearch(&data);
+    search_results = search_results + performBooleanRangeSearch(&data);
 
     printlnInt(search_results);
     printlnInt(1108); // End Boolean search test
 }
 
 // Initialize search data
-fn initializeSearchData(mut data: [i32; 5000]) {
+fn initializeSearchData(mut data: &mut [i32; 5000]) {
     let mut i: i32 = 0;
     let mut seed: i32 = 54321;
 
@@ -556,7 +556,7 @@ fn initializeSearchData(mut data: [i32; 5000]) {
 }
 
 // Perform Boolean-based filtering
-fn performBooleanFilter(data: [i32; 5000]) -> i32 {
+fn performBooleanFilter(data: &[i32; 5000]) -> i32 {
     let mut filtered_count: i32 = 0;
     let mut i: i32 = 0;
 
@@ -578,7 +578,7 @@ fn performBooleanFilter(data: [i32; 5000]) -> i32 {
 }
 
 // Perform multi-criteria Boolean search
-fn performMultiCriteriaSearch(data: [i32; 5000]) -> i32 {
+fn performMultiCriteriaSearch(data: &[i32; 5000]) -> i32 {
     let mut match_count: i32 = 0;
     let mut i: i32 = 0;
 
@@ -620,7 +620,7 @@ fn countCriteriaMet(value: i32) -> i32 {
 }
 
 // Perform Boolean range search
-fn performBooleanRangeSearch(data: [i32; 5000]) -> i32 {
+fn performBooleanRangeSearch(data: &[i32; 5000]) -> i32 {
     let mut range_matches: i32 = 0;
     let mut i: i32 = 0;
 
