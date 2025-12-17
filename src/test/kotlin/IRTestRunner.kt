@@ -270,9 +270,10 @@ private fun runIRTest(
     } finally {
         // Clean up temporary directory
         try {
-            Files.walk(tempDir)
-                .sorted(Comparator.reverseOrder())
-                .forEach { Files.deleteIfExists(it) }
+            Files.walk(tempDir).use { paths ->
+                paths.sorted(Comparator.reverseOrder())
+                    .forEach { Files.deleteIfExists(it) }
+            }
         } catch (e: Exception) {
             // Ignore cleanup errors
         }
@@ -507,9 +508,10 @@ private fun fetchTestData(projectRoot: Path, ir1Dir: Path): Boolean {
     } finally {
         // Clean up temporary directory
         try {
-            Files.walk(tempDir)
-                .sorted(Comparator.reverseOrder())
-                .forEach { Files.deleteIfExists(it) }
+            Files.walk(tempDir).use { paths ->
+                paths.sorted(Comparator.reverseOrder())
+                    .forEach { Files.deleteIfExists(it) }
+            }
         } catch (e: Exception) {
             // Ignore cleanup errors
         }
