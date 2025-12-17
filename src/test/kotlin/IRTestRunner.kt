@@ -1,6 +1,7 @@
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.nio.file.StandardCopyOption
 import java.io.File
 import kotlin.system.exitProcess
 
@@ -47,9 +48,15 @@ fun main(args: Array<String>) {
     val ir1Dir = projectRoot.resolve("IR-1")
     val builtinFile = projectRoot.resolve("builtin.c")
 
-    if (!Files.isDirectory(ir1Dir)) {
-        println("IR-1 directory not found: $ir1Dir")
-        exitProcess(1)
+    // Automatically fetch test data if IR-1 directory doesn't exist or is empty
+    if (!Files.isDirectory(ir1Dir) || isDirectoryEmpty(ir1Dir)) {
+        println("Fetching test data from external repository...")
+        val fetchResult = fetchTestData(projectRoot, ir1Dir)
+        if (!fetchResult) {
+            println("Failed to fetch test data. Please check your internet connection.")
+            exitProcess(1)
+        }
+        println("Test data fetched successfully.")
     }
 
     if (!Files.isRegularFile(builtinFile)) {
@@ -419,5 +426,115 @@ private fun printSummary(stats: IRTestStats, failures: List<IRTestResult>) {
         }
     } else {
         println("\nAll tests passed!")
+    }
+}
+
+private fun isDirectoryEmpty(directory: Path): Boolean {
+    if (!Files.isDirectory(directory)) return true
+    Files.list(directory).use { stream ->
+        return !stream.findFirst().isPresent
+    }
+}
+
+private fun fetchTestData(projectRoot: Path, ir1Dir: Path): Boolean {
+    val tempDir = Files.createTempDirectory("ir_testdata_fetch")
+    try {
+        // Use git sparse-checkout to fetch only IR-1/src from the external repository
+        val repoUrl = "https://github.com/peterzheng98/RCompiler-Testcases.git"
+        val cloneDir = tempDir.resolve("RCompiler-Testcases")
+        
+        // Step 1: Initialize sparse checkout
+        val initResult = runGitCommand(
+            listOf("git", "clone", "--depth", "1", "--filter=blob:none", "--sparse", repoUrl, cloneDir.toString()),
+            tempDir
+        )
+        if (!initResult) {
+            return false
+        }
+        
+        // Step 2: Configure sparse-checkout
+        val sparseCheckoutResult = runGitCommand(
+            listOf("git", "sparse-checkout", "init", "--cone"),
+            cloneDir
+        )
+        if (!sparseCheckoutResult) {
+            return false
+        }
+        
+        // Step 3: Set sparse-checkout to IR-1/src
+        val setPathResult = runGitCommand(
+            listOf("git", "sparse-checkout", "set", "IR-1/src"),
+            cloneDir
+        )
+        if (!setPathResult) {
+            return false
+        }
+        
+        // Step 4: Copy test data to project IR-1 directory
+        val srcDir = cloneDir.resolve("IR-1/src")
+        if (!Files.isDirectory(srcDir)) {
+            println("Error: IR-1/src directory not found in fetched repository")
+            return false
+        }
+        
+        // Create IR-1 directory if it doesn't exist
+        if (!Files.exists(ir1Dir)) {
+            Files.createDirectories(ir1Dir)
+        }
+        
+        // Copy files from subdirectories to flat structure
+        // External structure: IR-1/src/<testname>/<testname>.{rx,in,out}
+        // Target structure: IR-1/<testname>.{rx,in,out}
+        Files.list(srcDir).use { testDirs ->
+            testDirs.filter { Files.isDirectory(it) }.forEach { testDir ->
+                val testName = testDir.fileName.toString()
+                
+                // Copy .rx, .in, and .out files
+                for (ext in listOf(".rx", ".in", ".out")) {
+                    val sourceFile = testDir.resolve("$testName$ext")
+                    if (Files.exists(sourceFile)) {
+                        val targetFile = ir1Dir.resolve("$testName$ext")
+                        Files.copy(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING)
+                    }
+                }
+            }
+        }
+        
+        return true
+    } catch (e: Exception) {
+        println("Error fetching test data: ${e.message}")
+        return false
+    } finally {
+        // Clean up temporary directory
+        try {
+            Files.walk(tempDir)
+                .sorted(Comparator.reverseOrder())
+                .forEach { Files.deleteIfExists(it) }
+        } catch (e: Exception) {
+            // Ignore cleanup errors
+        }
+    }
+}
+
+private fun runGitCommand(command: List<String>, workingDir: Path): Boolean {
+    return try {
+        val process = ProcessBuilder(command)
+            .directory(workingDir.toFile())
+            .redirectOutput(ProcessBuilder.Redirect.PIPE)
+            .redirectError(ProcessBuilder.Redirect.PIPE)
+            .start()
+        
+        val exitCode = process.waitFor()
+        if (exitCode != 0) {
+            val errorOutput = process.errorStream.bufferedReader().readText()
+            println("Git command failed: ${command.joinToString(" ")}")
+            println("Error: $errorOutput")
+            false
+        } else {
+            true
+        }
+    } catch (e: Exception) {
+        println("Exception running git command: ${e.message}")
+        false
     }
 }

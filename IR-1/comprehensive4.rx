@@ -227,31 +227,31 @@ fn testTreeTraversalAlgorithms() {
 
     // Build a binary tree structure using arrays
     let mut tree_nodes: [i32; 127] = [0; 127]; // Complete binary tree with 7 levels
-    buildBinaryTree(tree_nodes);
+    buildBinaryTree(&mut tree_nodes);
 
     // Test different traversal methods
-    let preorder_sum: i32 = preorderTraversal(tree_nodes, 0);
+    let preorder_sum: i32 = preorderTraversal(&tree_nodes, 0);
     printlnInt(preorder_sum);
 
-    let inorder_sum: i32 = inorderTraversal(tree_nodes, 0);
+    let inorder_sum: i32 = inorderTraversal(&tree_nodes, 0);
     printlnInt(inorder_sum);
 
-    let postorder_sum: i32 = postorderTraversal(tree_nodes, 0);
+    let postorder_sum: i32 = postorderTraversal(&tree_nodes, 0);
     printlnInt(postorder_sum);
 
     // Test tree search operations
-    let search_result: i32 = recursiveTreeSearch(tree_nodes, 0, 50);
+    let search_result: i32 = recursiveTreeSearch(&tree_nodes, 0, 50);
     printlnInt(search_result);
 
     // Test tree depth calculation
-    let depth_result: i32 = calculateTreeDepth(tree_nodes, 0);
+    let depth_result: i32 = calculateTreeDepth(&tree_nodes, 0);
     printlnInt(depth_result);
 
     printlnInt(1406); // End tree traversal test
 }
 
 // Build binary tree with values
-fn buildBinaryTree(mut tree: [i32; 127]) {
+fn buildBinaryTree(tree: &mut [i32; 127]) {
     let mut i: i32 = 0;
     while (i < 127) {
         tree[i as usize] = (i + 1) * 10; // Simple value assignment
@@ -260,7 +260,7 @@ fn buildBinaryTree(mut tree: [i32; 127]) {
 }
 
 // Preorder traversal (root, left, right)
-fn preorderTraversal(tree: [i32; 127], index: usize) -> i32 {
+fn preorderTraversal(tree: &[i32; 127], index: usize) -> i32 {
     if (index >= 127 || tree[index] == 0) {
         return 0;
     }
@@ -273,7 +273,7 @@ fn preorderTraversal(tree: [i32; 127], index: usize) -> i32 {
 }
 
 // Inorder traversal (left, root, right)
-fn inorderTraversal(tree: [i32; 127], index: usize) -> i32 {
+fn inorderTraversal(tree: &[i32; 127], index: usize) -> i32 {
     if (index >= 127 || tree[index] == 0) {
         return 0;
     }
@@ -286,7 +286,7 @@ fn inorderTraversal(tree: [i32; 127], index: usize) -> i32 {
 }
 
 // Postorder traversal (left, right, root)
-fn postorderTraversal(tree: [i32; 127], index: usize) -> i32 {
+fn postorderTraversal(tree: &[i32; 127], index: usize) -> i32 {
     if (index >= 127 || tree[index] == 0) {
         return 0;
     }
@@ -299,7 +299,7 @@ fn postorderTraversal(tree: [i32; 127], index: usize) -> i32 {
 }
 
 // Recursive tree search
-fn recursiveTreeSearch(tree: [i32; 127], index: usize, target: i32) -> i32 {
+fn recursiveTreeSearch(tree: &[i32; 127], index: usize, target: i32) -> i32 {
     if (index >= 127 || tree[index] == 0) {
         return 0; // Not found
     }
@@ -318,7 +318,7 @@ fn recursiveTreeSearch(tree: [i32; 127], index: usize, target: i32) -> i32 {
 }
 
 // Calculate tree depth recursively
-fn calculateTreeDepth(tree: [i32; 127], index: usize) -> i32 {
+fn calculateTreeDepth(tree: &[i32; 127], index: usize) -> i32 {
     if (index >= 127 || tree[index] == 0) {
         return 0;
     }

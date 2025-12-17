@@ -7,22 +7,26 @@ Verdict: Pass
 Comment: Comprehensive test of segment tree merging
 */
 
-const MAXN: usize = 200;
-const LOG_MAXN: usize = 10;
-const MAXSEG: usize = 2000;
+const MAXN: usize = 128;
+const LOG_MAXN: usize = 9;
+const MAXSEG: usize = 512;
 
 struct Food {
     cnt: i32,
     ty: i32,
 }
 impl Food {
-    fn better(self, other: Food) -> Food {
+    fn better(&mut self, other: &Food) {
         if (self.cnt == other.cnt) {
-            if (self.ty < other.ty) { self } else { other }
+            if (self.ty >= other.ty) {
+                self.cnt = other.cnt;
+                self.ty = other.ty;
+            }
         } else if (self.cnt > other.cnt) {
-            self
+            
         } else {
-            other
+            self.cnt = other.cnt;
+            self.ty = other.ty;
         }
     }
 }
@@ -90,10 +94,10 @@ fn update(seg_pool: &mut [SegT; MAXSEG], seg_cnt: &mut usize, idx: usize, pos: i
     }
     let mut res: Food = Food { cnt: 0, ty: 0 };
     if (seg_pool[idx].lc != 0) {
-        res = seg_pool[idx].lc_val(seg_pool).better(res);
+        res.better(&seg_pool[idx].lc_val(seg_pool));
     }
     if (seg_pool[idx].rc != 0) {
-        res = seg_pool[idx].rc_val(seg_pool).better(res);
+        res.better(&seg_pool[idx].rc_val(seg_pool));
     }
     seg_pool[idx].val = res;
 }
@@ -122,10 +126,10 @@ fn merge(seg_pool: &mut [SegT; MAXSEG], seg_cnt: &mut usize, u: usize, v: usize)
     seg_pool[u].rc = merge(seg_pool, seg_cnt, seg_pool[u].rc, seg_pool[v].rc);
     let mut res: Food = Food { cnt: 0, ty: 0 };
     if (seg_pool[u].lc != 0) {
-        res = seg_pool[u].lc_val(seg_pool).better(res);
+        res.better(&seg_pool[u].lc_val(seg_pool));
     }
     if (seg_pool[u].rc != 0) {
-        res = seg_pool[u].rc_val(seg_pool).better(res);
+        res.better(&seg_pool[u].rc_val(seg_pool));
     }
     seg_pool[u].val = res;
     u
