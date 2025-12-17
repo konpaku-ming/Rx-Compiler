@@ -53,3 +53,6 @@ test_prog
 
 # IntelliJ/IDEA project files
 .idea/
+
+### Test data (auto-fetched) ###
+IR-1/
