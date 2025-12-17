@@ -564,8 +564,7 @@ private fun fetchTestData(projectRoot: Path, ir1Dir: Path, gitConfig: GitConfig)
         // Target structure: IR-1/<testname>.{rx,in,out}
         // Only process directories starting with "comprehensive"
         Files.list(srcDir).use { testDirs ->
-            testDirs.filter { Files.isDirectory(it) }
-                .filter { it.fileName.toString().startsWith("comprehensive") }
+            testDirs.filter { Files.isDirectory(it) && it.fileName.toString().startsWith("comprehensive") }
                 .forEach { testDir ->
                     val testName = testDir.fileName.toString()
                     
