@@ -69,11 +69,11 @@ fn main() {
 ## 环境要求
 
 **运行编译器（OJ 环境）：**
-- **JDK 17** 或更高版本（仅需 Java 运行时，无需 Gradle 或 Kotlin 编译器）
+- **JDK 21** 或更高版本（仅需 Java 运行时，无需 Gradle 或 Kotlin 编译器）
 - 项目包含预编译的 JAR 文件，可直接使用 Makefile 运行
 
 **开发环境（修改源码）：**
-- **JDK 17** 或更高版本
+- **JDK 21** 或更高版本
 - **Gradle** (项目包含 Gradle Wrapper，无需单独安装)
 - **LLVM** (如需执行生成的 IR，需安装 LLVM 工具链)
   - Linux/macOS: 直接安装 clang
@@ -112,7 +112,7 @@ gradlew.bat build
 
 **注意**：只有在修改了 Kotlin 源码后才需要重新生成 JAR 文件。正常使用编译器不需要此步骤。
 
-重新生成 JAR 需要完整的开发环境（JDK 17+ 和 Gradle）：
+重新生成 JAR 需要完整的开发环境（JDK 21+ 和 Gradle）：
 
 ```bash
 # 1. 使用 Gradle 构建并生成发行版
