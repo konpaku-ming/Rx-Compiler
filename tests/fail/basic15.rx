@@ -4,7 +4,7 @@ Test Target: basic
 Author: Wenxin Zheng
 Time: 2025-08-08
 Verdict: Fail
-Comment: basic test, incomplete trait implementation and array bounds error
+Comment: basic test, array bounds error
 */
 
 fn main() {
@@ -50,12 +50,7 @@ impl Board {
     }
 }
 
-trait Render {
-    fn draw(&self) -> String;
-    fn clear(&mut self);
-}
-
-impl Render for Board {
+impl Board {
     fn draw(&self) -> String { String::from("Board drawn") }
 }
 

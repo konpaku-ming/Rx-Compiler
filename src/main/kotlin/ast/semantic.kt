@@ -4006,6 +4006,14 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
         }
         val elementType = when (val baseType = node.base.resolvedType) {
             is ArrayResolvedType -> {
+                if (node.index is IntLiteralExprNode) {
+                    val indexValue = stringToUInt(node.index.raw)
+                    if (indexValue >= baseType.length.toUInt()) {
+                        throw SemanticException(
+                            "Array index out of bounds: the length is ${baseType.length} but the index is $indexValue"
+                        )
+                    }
+                }
                 node.exprType = when (node.base.exprType) {
                     ExprType.MutPlace -> ExprType.MutPlace
                     ExprType.Place -> ExprType.Place
@@ -4025,6 +4033,14 @@ class FifthVisitor(private val scopeTree: ScopeTree) : ASTVisitor {
                 }
                 val inner = baseType.inner as? ArrayResolvedType
                     ?: throw SemanticException("Cannot index into type $baseType")
+                if (node.index is IntLiteralExprNode) {
+                    val indexValue = stringToUInt(node.index.raw)
+                    if (indexValue >= inner.length.toUInt()) {
+                        throw SemanticException(
+                            "Array index out of bounds: the length is ${inner.length} but the index is $indexValue"
+                        )
+                    }
+                }
                 inner.elementType
             } // 自动解引用
 
