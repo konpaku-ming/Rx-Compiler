@@ -93,9 +93,7 @@ fun main(args: Array<String>) {
             // 能通过 Semantic 测试，但用到了 IR Generator 还未支持的特性
             exitProcess(0)
         }
-    } catch (e: CompilerException) {
-        println("failed")
-        System.err.println(e.message)
+    } catch (_: CompilerException) {
         exitProcess(1)
     }
 }
