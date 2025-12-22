@@ -11,9 +11,14 @@ BUILTIN_FILE := builtin.c
 JAVA_CP := $(LIB_DIR)/*
 MAIN_CLASS := MainKt
 
-# Build target: no-op since JAR files are pre-built and committed
+# Build target: verify JAR files exist
 .PHONY: build
 build:
+	@if [ ! -f $(LIB_DIR)/Rx-Compiler-1.0-SNAPSHOT.jar ]; then \
+		echo "Error: JAR files not found in $(LIB_DIR)/"; \
+		echo "Please ensure the lib/ directory contains the pre-built JAR files."; \
+		exit 1; \
+	fi
 	@echo "Build complete (using pre-built JAR files)"
 
 # Run target: run compiler reading from STDIN, output IR to STDOUT, builtin.c to STDERR

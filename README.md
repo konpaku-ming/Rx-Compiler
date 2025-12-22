@@ -106,11 +106,25 @@ cat source.rx | make run
 
 # Windows 用户
 gradlew.bat build
+```
 
-# 重新生成预编译的 JAR 文件
+### 重新生成预编译的 JAR 文件
+
+**注意**：只有在修改了 Kotlin 源码后才需要重新生成 JAR 文件。正常使用编译器不需要此步骤。
+
+重新生成 JAR 需要完整的开发环境（JDK 17+ 和 Gradle）：
+
+```bash
+# 1. 使用 Gradle 构建并生成发行版
 ./gradlew installDist
+
+# 2. 将生成的 JAR 文件复制到 lib 目录
 mkdir -p lib
 cp build/install/Rx-Compiler/lib/*.jar lib/
+
+# 3. 提交更新后的 JAR 文件
+git add lib/*.jar
+git commit -m "Update pre-built JARs"
 ```
 
 ## 使用方法
