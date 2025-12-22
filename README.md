@@ -68,13 +68,37 @@ fn main() {
 
 ## 环境要求
 
-- **JDK 21** 或更高版本
+**运行编译器（OJ 环境）：**
+- **JDK 17** 或更高版本（仅需 Java 运行时，无需 Gradle 或 Kotlin 编译器）
+- 项目包含预编译的 JAR 文件，可直接使用 Makefile 运行
+
+**开发环境（修改源码）：**
+- **JDK 17** 或更高版本
 - **Gradle** (项目包含 Gradle Wrapper，无需单独安装)
 - **LLVM** (如需执行生成的 IR，需安装 LLVM 工具链)
   - Linux/macOS: 直接安装 clang
   - Windows: 可以安装 clang 或在 WSL 中安装（测试工具支持自动检测和使用 WSL 中的 clang）
 
-## 构建
+## 使用 Makefile（推荐用于 OJ 环境）
+
+项目提供了 Makefile，可以在没有 Gradle 的环境中使用：
+
+```bash
+# 构建（使用预编译的 JAR，无需实际编译）
+make build
+
+# 运行编译器（从标准输入读取源代码）
+make run < source.rx
+
+# 或使用管道
+cat source.rx | make run
+```
+
+编译器会将 LLVM IR 输出到标准输出，将 builtin.c 输出到标准错误。
+
+## 使用 Gradle 构建（开发环境）
+
+如果需要修改源码并重新编译：
 
 ```bash
 # 使用 Gradle Wrapper 构建项目
@@ -82,6 +106,11 @@ fn main() {
 
 # Windows 用户
 gradlew.bat build
+
+# 重新生成预编译的 JAR 文件
+./gradlew installDist
+mkdir -p lib
+cp build/install/Rx-Compiler/lib/*.jar lib/
 ```
 
 ## 使用方法
