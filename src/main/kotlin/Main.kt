@@ -64,10 +64,10 @@ fun main(args: Array<String>) {
         fourthVisitor.visitCrate(node = ast) // 第四次pass
         val fifthVisitor = FifthVisitor(semanticScopeTree)
         fifthVisitor.visitCrate(node = ast) // 第五次pass
-        val intTypeConfirmer = IntegerConfirmer(semanticScopeTree)
-        intTypeConfirmer.visitCrate(node = ast) // 确认整数类型
 
         try {
+            val intTypeConfirmer = IntegerConfirmer(semanticScopeTree)
+            intTypeConfirmer.visitCrate(node = ast) // 确认整数类型
             val context = LLVMContext()
             val module = Module("main", context)
             val builder = IRBuilder(context)
