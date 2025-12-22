@@ -1,5 +1,5 @@
 # Makefile for Rx-Compiler
-# Requires: JDK 17+
+# Requires: JDK 21+
 
 # Paths
 # Allow overriding JAVA via environment variable, default to system java
@@ -43,5 +43,5 @@ help:
 	@echo "  help   - Show this help message"
 	@echo ""
 	@echo "Environment Variables:"
-	@echo "  JAVA   - Java executable path (default: java). Use for JDK 17+ if not in PATH"
-	@echo "           Example: JAVA=/path/to/jdk17/bin/java make run"
+	@echo "  JAVA   - Java executable path (default: java). Use for JDK 21+ if not in PATH"
+	@echo "           Example: JAVA=/path/to/jdk21/bin/java make run"
