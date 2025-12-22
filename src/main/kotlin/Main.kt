@@ -79,6 +79,13 @@ fun main(args: Array<String>) {
             // If reading from STDIN (no args or "-"), output to STDOUT
             if (args.isEmpty() || args[0] == "-") {
                 print(irContent)
+                // Output builtin.c to STDERR
+                try {
+                    val builtinContent = File("builtin.c").readText(Charsets.UTF_8)
+                    System.err.print(builtinContent)
+                } catch (e: Exception) {
+                    System.err.println("warning: cannot read builtin.c: ${e.message}")
+                }
             } else {
                 // Otherwise write to file as before
                 try {

@@ -24,7 +24,7 @@ build:
 # Run target: run compiler reading from STDIN, output IR to STDOUT, builtin.c to STDERR
 .PHONY: run
 run:
-	@$(JAVA) -cp "$(JAVA_CP)" $(MAIN_CLASS) -; test -f $(BUILTIN_FILE) && cat $(BUILTIN_FILE) >&2
+	@$(JAVA) -cp "$(JAVA_CP)" $(MAIN_CLASS) -
 
 # Clean build artifacts (no-op for pre-built JARs)
 .PHONY: clean
