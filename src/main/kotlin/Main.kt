@@ -17,6 +17,9 @@ import llvm.LLVMContext
 import llvm.Module
 import llvm.IRBuilder
 
+// Path to the builtin.c file that provides runtime support functions
+private const val BUILTIN_FILE_PATH = "builtin.c"
+
 fun main(args: Array<String>) {
     val sourceCode: String
 
@@ -79,6 +82,13 @@ fun main(args: Array<String>) {
             // If reading from STDIN (no args or "-"), output to STDOUT
             if (args.isEmpty() || args[0] == "-") {
                 print(irContent)
+                // Output builtin.c to STDERR
+                try {
+                    val builtinContent = File(BUILTIN_FILE_PATH).readText(Charsets.UTF_8)
+                    System.err.print(builtinContent)
+                } catch (e: Exception) {
+                    System.err.println("warning: cannot read '$BUILTIN_FILE_PATH' from current directory: ${e.message}")
+                }
             } else {
                 // Otherwise write to file as before
                 try {
